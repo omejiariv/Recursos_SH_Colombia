@@ -212,15 +212,70 @@ elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
         auto_highlight=True,
     )
 
+    # El cambio clave está aquí: map_style='carto-positron'
     st.pydeck_chart(pdk.Deck(
         layers=[layer],
         initial_view_state=view_state,
-        map_style='mapbox://styles/mapbox/light-v10',
+        map_style='carto-positron', 
         tooltip={"text": "{hitos}\nCota: {elevacion_cota} msnm"}
     ))
     
     st.success("El módulo ajusta la escala espacial y disposición geográfica de La Fe y Piedras Blancas, y mantiene la configuración de elevación del relleno sanitario a 1,000 metros sobre el nivel del mar para coincidir con el relieve geográfico.")
 
-elif modulo_seleccionado == "⚙️ 4. Simulador: Fondo Común vs. Dispersión":
+# --- MÓDULO 4: EL SIMULADOR DE FONDO COMÚN ---
+elif modulo_seleccionado == "⚙️ 4. Simulador: Fondo Común":
     st.title("Simulador Estratégico de Asignación Óptima")
-    st.warning("Próximo paso: Lógica de simulación algorítmica.")
+    
+    st.write("""
+    Compara el modelo actual de inversiones fragmentadas frente a un esquema de **Fondo Común** con plan estratégico unificado.
+    Ajusta el porcentaje de recursos unificados para proyectar el incremento en impacto territorial.
+    """)
+    
+    col_sim1, col_sim2 = st.columns([1, 2])
+    
+    with col_sim1:
+        st.subheader("Parámetros del Modelo")
+        porcentaje_fondo = st.slider("% de Recursos en Fondo Común", min_value=0, max_value=100, value=20, step=10)
+        criterio_priorizacion = st.selectbox("Criterio de Inversión", ["Estrés Hídrico", "Riesgo de Desabastecimiento", "ROI Ecológico"])
+        
+        # Cálculos de simulación
+        inversion_total = df_flujo['monto_recaudado'].sum()
+        eficiencia_base = (df_flujo['monto_real_invertido'].sum() / inversion_total) * 100
+        
+        # Cada 10% unificado incrementa la eficiencia y reduce costos administrativos
+        eficiencia_simulada = eficiencia_base + (porcentaje_fondo * 0.25)
+        eficiencia_simulada = min(eficiencia_simulada, 98.0) # Tope lógico
+        
+        st.metric(label="Eficiencia Financiera Proyectada", 
+                  value=f"{eficiencia_simulada:.1f}%", 
+                  delta=f"{(eficiencia_simulada - eficiencia_base):.1f}% de mejora")
+
+    with col_sim2:
+        st.subheader("Proyección de Impacto: Hectáreas Restauradas")
+        
+        # Proyección de impacto en territorio
+        ha_base = df_impacto['ha_restauradas'].sum()
+        # Se asume un multiplicador de impacto por la centralización estratégica
+        ha_proyectadas = ha_base * (1 + (porcentaje_fondo * 0.008))
+        
+        # Gráfica comparativa usando Plotly Graph Objects
+        fig_sim = go.Figure(data=[
+            go.Bar(
+                name='Impacto',
+                x=["Escenario Actual (Fragmentado)", "Escenario Simulado (Fondo Común)"],
+                y=[ha_base, ha_proyectadas],
+                text=[f"{ha_base:,.0f} ha", f"{ha_proyectadas:,.0f} ha"],
+                textposition='auto',
+                marker_color=["#e74c3c", "#2ecc71"]
+            )
+        ])
+        
+        fig_sim.update_layout(
+            height=400, 
+            margin=dict(t=30, b=0, l=0, r=0),
+            plot_bgcolor='rgba(0,0,0,0)'
+        )
+        
+        st.plotly_chart(fig_sim, use_container_width=True)
+        
+        st.info(f"💡 **Insight Territorial:** Al unificar el **{porcentaje_fondo}%** de los recursos en un fondo común bajo el criterio de **{criterio_priorizacion}**, la capacidad de restauración pasaría de {ha_base:,.0f} hectáreas a **{ha_proyectadas:,.0f} hectáreas**, eliminando esfuerzos duplicados en subcuencas.")
