@@ -8,14 +8,40 @@ import pydeck as pdk
 # -----------------------------------------------------------------------------
 @st.cache_data
 def cargar_datos():
-    # En un entorno de producción, aquí conectaríamos a Supabase/PostGIS
-    df_origenes = pd.read_csv('origenes_recursos.csv')
-    df_ejecucion = pd.read_csv('ejecucion_proyectos.csv')
-    df_impacto = pd.read_csv('impacto_efectividad.csv')
+    # 1. Tabla de Orígenes de Recursos
+    df_origenes = pd.DataFrame({
+        'id_fuente': ['F001', 'F002', 'F003', 'F004', 'F005'],
+        'tipo_recurso': ['Ley (Inversión 1%)', 'Ley (Transferencias)', 'Voluntario (Fondo)', 'Voluntario (ESG)', 'Ley (SGP)'],
+        'entidad_recaudadora': ['Autoridad Ambiental Local', 'Sector Eléctrico', 'Fondo de Agua', 'Empresa Privada', 'Sistema General'],
+        'monto_recaudado': [50000000000, 120000000000, 35000000000, 15000000000, 80000000000],
+        'vigencia': [2024, 2024, 2024, 2024, 2024]
+    })
+    
+    # 2. Tabla de Ejecución de Proyectos
+    df_ejecucion = pd.DataFrame({
+        'id_proyecto': ['P001', 'P002', 'P003', 'P004', 'P005'],
+        'id_fuente': ['F001', 'F002', 'F003', 'F004', 'F005'],
+        'monto_real_invertido': [30000000000, 90000000000, 32000000000, 10000000000, 40000000000],
+        'entidad_ejecutora': ['ONG Territorial', 'Operador Hídrico', 'Corporación Cuenca', 'Junta de Acción Local', 'Municipio'],
+        'ubicacion_estrategica': ['Embalse La Fe', 'Embalse Piedras Blancas', 'Corredor Ribereño Norte', 'Zona Recarga Sur', 'Microcuenca Alta'],
+        'lat': [6.1158, 6.2917, 6.3500, 6.0500, 6.4000],
+        'lon': [-75.4983, -75.5011, -75.5500, -75.6000, -75.4500],
+        'cuenca': ['Río Pantanillo', 'Río Piedras', 'Río Porce', 'Río Aburrá', 'Río Grande']
+    })
+    
+    # 3. Tabla de Impacto y Efectividad
+    df_impacto = pd.DataFrame({
+        'id_proyecto': ['P001', 'P002', 'P003', 'P004', 'P005'],
+        'ha_restauradas': [120, 350, 80, 45, 200],
+        'aislamientos_km': [15.5, 40.0, 10.2, 5.0, 25.4],
+        'familias_psa': [45, 120, 30, 15, 80],
+        'roi_ambiental': [1.2, 2.5, 1.8, 1.1, 2.0]
+    })
     
     # Consolidar datos para el análisis de flujo
     df_flujo = pd.merge(df_origenes, df_ejecucion, on='id_fuente', how='left')
     df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
+    
     return df_origenes, df_ejecucion, df_impacto, df_flujo
 
 df_origenes, df_ejecucion, df_impacto, df_flujo = cargar_datos()
@@ -55,7 +81,6 @@ with st.sidebar:
 
 if modulo_seleccionado == "📊 1. El Panorama Nacional vs. Regional":
     st.title("Panorama de Recursos Ambientales e Hídricos")
-    # ... (Código del Módulo 1 que ya teníamos) ...
     st.write("Datos cargados correctamente. Aquí conectaremos las métricas generales.")
 
 # --- MÓDULO 2: EL EMBUDO DE LA VERDAD ---
@@ -67,13 +92,7 @@ elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
     antes de materializarse en infraestructura verde y conservación de cuencas.
     """)
     
-    # Preparar nodos y enlaces para el Sankey
-    # Nodos de Origen (Índices 0 a N-1)
     fuentes = df_flujo['tipo_recurso'].tolist()
-    
-    # Nodos de Destino
-    # Índice N: Inversión Real Ejecutada
-    # Índice N+1: Brecha (Retenidos / Administrativo)
     idx_ejecutada = len(fuentes)
     idx_brecha = len(fuentes) + 1
     
@@ -84,19 +103,15 @@ elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
     destinos = []
     valores = []
     
-    # Construir los enlaces (Links)
     for i, row in df_flujo.iterrows():
-        # Enlace del origen hacia lo Ejecutado
         origenes.append(i)
         destinos.append(idx_ejecutada)
         valores.append(row['monto_real_invertido'])
         
-        # Enlace del origen hacia la Brecha
         origenes.append(i)
         destinos.append(idx_brecha)
         valores.append(row['brecha_perdida'])
 
-    # Crear la figura interactiva de Sankey
     fig = go.Figure(data=[go.Sankey(
         node = dict(
           pad = 20,
@@ -109,7 +124,7 @@ elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
           source = origenes,
           target = destinos,
           value = valores,
-          color = "rgba(189, 195, 199, 0.4)" # Gris translúcido para el flujo
+          color = "rgba(189, 195, 199, 0.4)" 
         )
     )])
 
@@ -122,7 +137,6 @@ elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
     
     st.plotly_chart(fig, use_container_width=True)
     
-    # Análisis inferior
     st.info(f"**Análisis Rápido:** De un recaudo total simulado de **${df_flujo['monto_recaudado'].sum():,.0f}**, solo **${df_flujo['monto_real_invertido'].sum():,.0f}** llega a ser ejecutado por actores en el territorio, dejando una brecha en el camino del **{(df_flujo['brecha_perdida'].sum() / df_flujo['monto_recaudado'].sum()) * 100:.1f}%**.")
 
 # --- MÓDULO 3: VISOR GEOESPACIAL ---
@@ -130,26 +144,23 @@ elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
     st.title("Impacto Territorial y Escala Espacial")
     st.markdown("Mapeo 3D de intervenciones, infraestructura hídrica y cotas de elevación.")
     
-    # Datos estructurados con la altimetría corregida
     mapa_data = pd.DataFrame({
         'hitos': ['Embalse La Fe', 'Embalse Piedras Blancas', 'Relleno Sanitario Regional', 'Corredor Ribereño Norte'],
         'lat': [6.1158, 6.2917, 6.3000, 6.3500], 
         'lon': [-75.4983, -75.5011, -75.5200, -75.5500],
-        'elevacion_cota': [2100, 2300, 1000, 1500], # Cota del relleno configurada exactamente a 1,000 msnm
-        'radio_dimension': [1200, 900, 500, 800], # Redimensionamiento para proporciones exactas
+        'elevacion_cota': [2100, 2300, 1000, 1500], 
+        'radio_dimension': [1200, 900, 500, 800], 
         'color': [[52, 152, 219, 180], [52, 152, 219, 180], [231, 76, 60, 180], [46, 204, 113, 180]]
     })
 
-    # Configuración de la cámara apuntando al Valle de Aburrá con inclinación 3D
     view_state = pdk.ViewState(
         latitude=6.2518,
         longitude=-75.5636,
         zoom=10,
-        pitch=50, # Inclinación para habilitar la perspectiva 3D
+        pitch=50, 
         bearing=-15
     )
 
-    # Capa de columnas 3D que extruye la altimetría
     layer = pdk.Layer(
         "ColumnLayer",
         data=mapa_data,
@@ -162,7 +173,6 @@ elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
         auto_highlight=True,
     )
 
-    # Renderizado del mapa en Streamlit
     st.pydeck_chart(pdk.Deck(
         layers=[layer],
         initial_view_state=view_state,
