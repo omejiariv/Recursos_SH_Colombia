@@ -178,47 +178,40 @@ elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
     
     st.info(texto_analisis)
     
+# Recuerda agregar al inicio: from streamlit_folium import st_folium
+import folium
+
 # --- MÓDULO 3: VISOR GEOESPACIAL ---
 elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
     st.title("Impacto Territorial y Escala Espacial")
-    st.markdown("Mapeo 3D de intervenciones, infraestructura hídrica y cotas de elevación.")
+    st.markdown("Mapeo topográfico de intervenciones e infraestructura hídrica regional.")
     
-    mapa_data = pd.DataFrame({
-        'hitos': ['Embalse La Fe', 'Embalse Piedras Blancas', 'Relleno Sanitario Regional', 'Corredor Ribereño Norte'],
-        'lat': [6.1158, 6.2917, 6.3000, 6.3500], 
-        'lon': [-75.4983, -75.5011, -75.5200, -75.5500],
-        'elevacion_cota': [2100, 2300, 1000, 1500], 
-        'radio_dimension': [1200, 900, 500, 800], 
-        'color': [[52, 152, 219, 180], [52, 152, 219, 180], [231, 76, 60, 180], [46, 204, 113, 180]]
-    })
+    # Coordenadas y radios ajustados
+    mapa_data = [
+        {"hitos": "Embalse La Fe", "lat": 6.1158, "lon": -75.4983, "cota": 2100, "radio": 1200, "color": "#3498db"},
+        {"hitos": "Embalse Piedras Blancas", "lat": 6.2917, "lon": -75.5011, "cota": 2300, "radio": 900, "color": "#3498db"},
+        {"hitos": "Relleno Sanitario Regional", "lat": 6.3000, "lon": -75.5200, "cota": 1000, "radio": 500, "color": "#e74c3c"},
+        {"hitos": "Corredor Ribereño Norte", "lat": 6.3500, "lon": -75.5500, "cota": 1500, "radio": 800, "color": "#2ecc71"}
+    ]
 
-    view_state = pdk.ViewState(
-        latitude=6.2518,
-        longitude=-75.5636,
-        zoom=10,
-        pitch=50, 
-        bearing=-15
-    )
+    # Crear mapa base con OpenTopoMap (Ideal para cuencas hidrográficas)
+    m = folium.Map(location=[6.2518, -75.5636], zoom_start=10, tiles="OpenTopoMap")
 
-    layer = pdk.Layer(
-        "ColumnLayer",
-        data=mapa_data,
-        get_position='[lon, lat]',
-        get_elevation='elevacion_cota',
-        elevation_scale=1,
-        get_radius='radio_dimension',
-        get_fill_color='color',
-        pickable=True,
-        auto_highlight=True,
-    )
+    # Agregar círculos proporcionales
+    for d in mapa_data:
+        folium.Circle(
+            location=[d['lat'], d['lon']],
+            radius=d['radio'],
+            color=d['color'],
+            fill=True,
+            fill_color=d['color'],
+            fill_opacity=0.7,
+            popup=f"<b>{d['hitos']}</b><br>Cota: {d['cota']} msnm"
+        ).add_to(m)
 
-    # El cambio clave está aquí: map_style='carto-positron'
-    st.pydeck_chart(pdk.Deck(
-        layers=[layer],
-        initial_view_state=view_state,
-        map_style='carto-positron', 
-        tooltip={"text": "{hitos}\nCota: {elevacion_cota} msnm"}
-    ))
+    # Renderizar en Streamlit
+    from streamlit_folium import st_folium
+    st_folium(m, width=1200, height=600)
     
     st.success("El módulo ajusta la escala espacial y disposición geográfica de La Fe y Piedras Blancas, y mantiene la configuración de elevación del relleno sanitario a 1,000 metros sobre el nivel del mar para coincidir con el relieve geográfico.")
 
