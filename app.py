@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import pydeck as pdk
 
 # -----------------------------------------------------------------------------
 # 0. Carga y Procesamiento de Datos (Caché para optimizar rendimiento)
@@ -124,10 +125,52 @@ elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
     # Análisis inferior
     st.info(f"**Análisis Rápido:** De un recaudo total simulado de **${df_flujo['monto_recaudado'].sum():,.0f}**, solo **${df_flujo['monto_real_invertido'].sum():,.0f}** llega a ser ejecutado por actores en el territorio, dejando una brecha en el camino del **{(df_flujo['brecha_perdida'].sum() / df_flujo['monto_recaudado'].sum()) * 100:.1f}%**.")
 
-# --- MÓDULOS 3 Y 4 (Placeholders) ---
+# --- MÓDULO 3: VISOR GEOESPACIAL ---
 elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
     st.title("Impacto Territorial y Escala Espacial")
-    st.warning("Próximo paso: Integración del mapa base interactivo.")
+    st.markdown("Mapeo 3D de intervenciones, infraestructura hídrica y cotas de elevación.")
+    
+    # Datos estructurados con la altimetría corregida
+    mapa_data = pd.DataFrame({
+        'hitos': ['Embalse La Fe', 'Embalse Piedras Blancas', 'Relleno Sanitario Regional', 'Corredor Ribereño Norte'],
+        'lat': [6.1158, 6.2917, 6.3000, 6.3500], 
+        'lon': [-75.4983, -75.5011, -75.5200, -75.5500],
+        'elevacion_cota': [2100, 2300, 1000, 1500], # Cota del relleno configurada exactamente a 1,000 msnm
+        'radio_dimension': [1200, 900, 500, 800], # Redimensionamiento para proporciones exactas
+        'color': [[52, 152, 219, 180], [52, 152, 219, 180], [231, 76, 60, 180], [46, 204, 113, 180]]
+    })
+
+    # Configuración de la cámara apuntando al Valle de Aburrá con inclinación 3D
+    view_state = pdk.ViewState(
+        latitude=6.2518,
+        longitude=-75.5636,
+        zoom=10,
+        pitch=50, # Inclinación para habilitar la perspectiva 3D
+        bearing=-15
+    )
+
+    # Capa de columnas 3D que extruye la altimetría
+    layer = pdk.Layer(
+        "ColumnLayer",
+        data=mapa_data,
+        get_position='[lon, lat]',
+        get_elevation='elevacion_cota',
+        elevation_scale=1,
+        get_radius='radio_dimension',
+        get_fill_color='color',
+        pickable=True,
+        auto_highlight=True,
+    )
+
+    # Renderizado del mapa en Streamlit
+    st.pydeck_chart(pdk.Deck(
+        layers=[layer],
+        initial_view_state=view_state,
+        map_style='mapbox://styles/mapbox/light-v10',
+        tooltip={"text": "{hitos}\nCota: {elevacion_cota} msnm"}
+    ))
+    
+    st.success("El módulo ajusta la escala espacial y disposición geográfica de La Fe y Piedras Blancas, y mantiene la configuración de elevación del relleno sanitario a 1,000 metros sobre el nivel del mar para coincidir con el relieve geográfico.")
 
 elif modulo_seleccionado == "⚙️ 4. Simulador: Fondo Común vs. Dispersión":
     st.title("Simulador Estratégico de Asignación Óptima")
