@@ -83,6 +83,37 @@ if modulo_seleccionado == "📊 1. El Panorama Nacional vs. Regional":
     st.title("Panorama de Recursos Ambientales e Hídricos")
     st.write("Datos cargados correctamente. Aquí conectaremos las métricas generales.")
 
+# --- MÓDULO 1: EL PANORAMA ---
+if modulo_seleccionado == "📊 1. El Panorama Nacional vs. Regional":
+    st.title("Panorama de Recursos Ambientales e Hídricos")
+    st.markdown(f"**Área de análisis actual:** {region}")
+    
+    st.write("""
+    En esta sección presentamos los KPIs principales del sistema financiero ambiental: 
+    Total recaudado vs. Total ejecutado en campo.
+    """)
+    
+    # Cálculos dinámicos para los KPIs basados en el DataFrame
+    total_recaudado = df_flujo['monto_recaudado'].sum()
+    total_ejecutado = df_flujo['monto_real_invertido'].sum()
+    brecha = total_recaudado - total_ejecutado
+    eficiencia = (total_ejecutado / total_recaudado) * 100
+    
+    recursos_ley = df_flujo[df_flujo['tipo_recurso'].str.contains('Ley')]['monto_recaudado'].sum()
+    recursos_voluntarios = df_flujo[df_flujo['tipo_recurso'].str.contains('Voluntario')]['monto_recaudado'].sum()
+
+    # Renderizado de métricas en columnas (Layout)
+    col1, col2, col3 = st.columns(3)
+    col1.metric(label="Total Recaudado", value=f"${total_recaudado:,.0f}")
+    col2.metric(label="Inversión Real Ejecutada", value=f"${total_ejecutado:,.0f}", delta=f"-${brecha:,.0f} (Brecha)", delta_color="inverse")
+    col3.metric(label="Eficiencia del Sistema", value=f"{eficiencia:.1f}%")
+    
+    st.markdown("---")
+    
+    col4, col5 = st.columns(2)
+    col4.metric(label="Recursos de Ley", value=f"${recursos_ley:,.0f}")
+    col5.metric(label="Recursos Voluntarios (Privados/Fondos)", value=f"${recursos_voluntarios:,.0f}")
+
 # --- MÓDULO 2: EL EMBUDO DE LA VERDAD ---
 elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
     st.title("La Brecha de Ejecución: Del Recaudo al Territorio")
@@ -135,10 +166,18 @@ elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
         margin=dict(t=50, l=0, r=0, b=0)
     )
     
+    # Renderizado del gráfico
     st.plotly_chart(fig, use_container_width=True)
     
-    st.info(f"**Análisis Rápido:** De un recaudo total simulado de **${df_flujo['monto_recaudado'].sum():,.0f}**, solo **${df_flujo['monto_real_invertido'].sum():,.0f}** llega a ser ejecutado por actores en el territorio, dejando una brecha en el camino del **{(df_flujo['brecha_perdida'].sum() / df_flujo['monto_recaudado'].sum()) * 100:.1f}%**.")
-
+    # Corrección de sintaxis: Cálculos previos y formateo de texto limpio
+    total_rec = df_flujo['monto_recaudado'].sum()
+    total_ejec = df_flujo['monto_real_invertido'].sum()
+    pct_brecha = (df_flujo['brecha_perdida'].sum() / total_rec) * 100
+    
+    texto_analisis = f"**Análisis Rápido:** De un recaudo total simulado de **${total_rec:,.0f}**, solo **${total_ejec:,.0f}** llega a ser ejecutado por actores en el territorio, dejando una brecha en el camino del **{pct_brecha:.1f}%**."
+    
+    st.info(texto_analisis)
+    
 # --- MÓDULO 3: VISOR GEOESPACIAL ---
 elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
     st.title("Impacto Territorial y Escala Espacial")
