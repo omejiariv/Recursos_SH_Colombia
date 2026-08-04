@@ -170,18 +170,23 @@ elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
     # Renderizado del gráfico
     st.plotly_chart(fig, use_container_width=True)
     
-    # Corrección de sintaxis: Cálculos previos y formateo de texto limpio
+    # Cálculos previos para el análisis de eficiencia
     total_rec = df_flujo['monto_recaudado'].sum()
     total_ejec = df_flujo['monto_real_invertido'].sum()
     pct_brecha = (df_flujo['brecha_perdida'].sum() / total_rec) * 100
     
-    texto_analisis = f"**Análisis Rápido:** De un recaudo total simulado de **${total_rec:,.0f}**, solo **${total_ejec:,.0f}** llega a ser ejecutado por actores en el territorio, dejando una brecha en el camino del **{pct_brecha:.1f}%**."
+    # Texto de análisis con un enfoque técnico y expresivo
+    texto_analisis = (
+        f"**La Anatomía del Flujo y el Laberinto del Recurso:** De un volumen inicial de "
+        f"**${total_rec:,.0f}** movilizados en el papel, el diagrama revela que solo "
+        f"**${total_ejec:,.0f}** logran decantarse en soluciones tangibles en el territorio. "
+        f"La corriente financiera sufre una dispersión constante, dejando una brecha "
+        f"estructural del **{pct_brecha:.1f}%**."
+    )
     
-    st.info(texto_analisis)
+    # Usamos st.warning para resaltar visualmente el problema de la brecha
+    st.warning(texto_analisis, icon="⚠️")
     
-# Recuerda agregar al inicio: from streamlit_folium import st_folium
-import folium
-
 # --- MÓDULO 3: VISOR GEOESPACIAL ---
 elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
     st.title("Impacto Territorial y Escala Espacial")
@@ -211,7 +216,6 @@ elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
         ).add_to(m)
 
     # Renderizar en Streamlit
-    from streamlit_folium import st_folium
     st_folium(m, width=1200, height=600)
     
     st.success("El módulo ajusta la escala espacial y disposición geográfica de La Fe y Piedras Blancas, y mantiene la configuración de elevación del relleno sanitario a 1,000 metros sobre el nivel del mar para coincidir con el relieve geográfico.")
