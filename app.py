@@ -32,7 +32,7 @@ st.markdown("""
 # 2. Barra Lateral (Navegación y Filtros Globales)
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.image("https://via.placeholder.com/300x100.png?text=Logo+Proyecto", use_column_width=True)
+    st.image("https://via.placeholder.com/300x100.png?text=Logo+Proyecto", use_container_width=True)
     st.title("Navegación")
     
     # Menú de selección de módulos
