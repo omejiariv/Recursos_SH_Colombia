@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import pydeck as pdk
+import folium
+from streamlit_folium import st_folium
 
 # -----------------------------------------------------------------------------
 # 0. Carga y Procesamiento de Datos (Caché para optimizar rendimiento)
