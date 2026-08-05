@@ -7,37 +7,70 @@ from streamlit_folium import st_folium
 # -----------------------------------------------------------------------------
 # 0. Carga y Procesamiento de Datos (Caché para optimizar rendimiento)
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# 0. Carga y Procesamiento de Datos Base
+# -----------------------------------------------------------------------------
 @st.cache_data
 def cargar_datos():
-    # 1. Tabla de Orígenes de Recursos
+    # 1. Catálogo Normativo y Jurídico (NUEVO)
+    df_normatividad = pd.DataFrame({
+        'Instrumento': [
+            'Art. 41 (Ley 99/93) - 1% Ingresos Corrientes', 
+            'Transferencias Sector Eléctrico (Ley 99, Art. 45)', 
+            'Tasa por Uso de Agua (Dec. 155/04)', 
+            'Tasa Retributiva (Dec. 2667/12)', 
+            'Inversión Forzosa 1% (Dec. 1900/06)', 
+            'Pago por Servicios Ambientales (Ley 870/17)', 
+            'Recursos ESG (Top 20 Empresas Privadas)'
+        ],
+        'Tipo': ['Ley', 'Ley', 'Ley', 'Ley', 'Ley', 'Mixto/Voluntario', 'Voluntario'],
+        'Entidad Gestora': [
+            'Municipios / Distritos', 
+            'Municipios (3%) / CARs (3%)', 
+            'Autoridades Ambientales (CAR/AMVA)', 
+            'Autoridades Ambientales (CAR/AMVA)', 
+            'Autoridades Ambientales', 
+            'MinAmbiente / Territorios', 
+            'Sector Privado / Fondos de Agua'
+        ],
+        'Destinación Específica': [
+            'Adquisición y mantenimiento de áreas de importancia hídrica.',
+            'Protección del medio ambiente y cuencas aportantes.',
+            'Protección y recuperación del recurso hídrico.',
+            'Proyectos de descontaminación hídrica territorial.',
+            'Recuperación, preservación y vigilancia de la cuenca.',
+            'Incentivos directos a propietarios rurales por conservación.',
+            'Sostenibilidad, compensación de huella hídrica y economía circular.'
+        ]
+    })
+
+    # 2. Orígenes de Recursos
     df_origenes = pd.DataFrame({
         'id_fuente': ['F001', 'F002', 'F003', 'F004', 'F005'],
         'tipo_recurso': ['Ley (Inversión 1%)', 'Ley (Transferencias)', 'Voluntario (Fondo)', 'Voluntario (ESG)', 'Ley (SGP)'],
         'entidad_recaudadora': ['Autoridad Ambiental Local', 'Sector Eléctrico', 'Fondo de Agua', 'Empresa Privada', 'Sistema General'],
-        'monto_recaudado': [50000000000, 120000000000, 35000000000, 15000000000, 80000000000],
-        'vigencia': [2024, 2024, 2024, 2024, 2024]
+        'monto_recaudado': [50000000000, 120000000000, 35000000000, 15000000000, 80000000000]
     })
     
-    # 2. Tabla de Ejecución de Proyectos
+    # 3. Ejecución de Proyectos (Agregamos la columna 'region')
     df_ejecucion = pd.DataFrame({
         'id_proyecto': ['P001', 'P002', 'P003', 'P004', 'P005'],
         'id_fuente': ['F001', 'F002', 'F003', 'F004', 'F005'],
         'monto_real_invertido': [30000000000, 90000000000, 32000000000, 10000000000, 40000000000],
         'entidad_ejecutora': ['ONG Territorial', 'Operador Hídrico', 'Corporación Cuenca', 'Junta de Acción Local', 'Municipio'],
-        'ubicacion_estrategica': ['Embalse La Fe', 'Embalse Piedras Blancas', 'Corredor Ribereño Norte', 'Zona Recarga Sur', 'Microcuenca Alta'],
-        'lat': [6.1158, 6.2917, 6.3500, 6.0500, 6.4000],
-        'lon': [-75.4983, -75.5011, -75.5500, -75.6000, -75.4500],
-        'cuenca': ['Río Pantanillo', 'Río Piedras', 'Río Porce', 'Río Aburrá', 'Río Grande']
+        'lat': [6.1158, 6.2917, 6.3500, 6.0500, 8.5000],
+        'lon': [-75.4983, -75.5011, -75.5500, -75.6000, -76.0000],
+        'region': ['Valle de Aburrá', 'Valle de Aburrá', 'Antioquia', 'Valle de Aburrá', 'Toda Colombia'] # Clave para el filtro
     })
     
-    # 3. Tabla de Impacto y Efectividad
     df_impacto = pd.DataFrame({
         'id_proyecto': ['P001', 'P002', 'P003', 'P004', 'P005'],
-        'ha_restauradas': [120, 350, 80, 45, 200],
-        'aislamientos_km': [15.5, 40.0, 10.2, 5.0, 25.4],
-        'familias_psa': [45, 120, 30, 15, 80],
-        'roi_ambiental': [1.2, 2.5, 1.8, 1.1, 2.0]
+        'ha_restauradas': [120, 350, 80, 45, 200]
     })
+    
+    return df_normatividad, df_origenes, df_ejecucion, df_impacto
+
+df_normatividad, df_origenes, df_ejecucion_base, df_impacto = cargar_datos()
     
     # Consolidar datos para el análisis de flujo
     df_flujo = pd.merge(df_origenes, df_ejecucion, on='id_fuente', how='left')
@@ -62,19 +95,23 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 # 2. Barra Lateral
 # -----------------------------------------------------------------------------
-with st.sidebar:
-    st.image("https://via.placeholder.com/300x100.png?text=Logo+Proyecto", use_container_width=True)
-    st.title("Navegación")
-    
-    modulo_seleccionado = st.radio(
-        "Ir a:",
-        ["📊 1. El Panorama Nacional vs. Regional", "📉 2. El Embudo de la Verdad (Flujo)", "🗺️ 3. Visor Geoespacial de Impacto", "⚙️ 4. Simulador: Fondo Común"]
-    )
-    
-    st.markdown("---")
-    st.subheader("Filtros Globales")
-    region = st.selectbox("Región de Análisis", ["Toda Colombia", "Antioquia", "Valle de Aburrá"], index=2)
-    anio_fiscal = st.slider("Vigencia Fiscal", 2020, 2026, (2024, 2026))
+# -----------------------------------------------------------------------------
+# Motor de Filtrado Dinámico (Pandas Pipeline)
+# -----------------------------------------------------------------------------
+# Lógica de anidamiento territorial
+if region == "Valle de Aburrá":
+    filtro_regiones = ['Valle de Aburrá']
+elif region == "Antioquia":
+    filtro_regiones = ['Valle de Aburrá', 'Antioquia']
+else:
+    filtro_regiones = df_ejecucion_base['region'].unique() # Toda Colombia
+
+# Aplicar el filtro a la tabla de ejecución
+df_ejecucion = df_ejecucion_base[df_ejecucion_base['region'].isin(filtro_regiones)]
+
+# Recalcular el flujo financiero uniendo orígenes con la ejecución ya filtrada
+df_flujo = pd.merge(df_origenes, df_ejecucion, on='id_fuente', how='left').fillna(0)
+df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
 
 # -----------------------------------------------------------------------------
 # 3. Módulos
@@ -114,6 +151,12 @@ if modulo_seleccionado == "📊 1. El Panorama Nacional vs. Regional":
     col4, col5 = st.columns(2)
     col4.metric(label="Recursos de Ley", value=f"${recursos_ley:,.0f}")
     col5.metric(label="Recursos Voluntarios (Privados/Fondos)", value=f"${recursos_voluntarios:,.0f}")
+
+    with st.expander("📖 Soporte Jurídico y Clasificación de Recursos"):
+        st.markdown("### Catálogo Normativo para la Protección del Agua")
+        st.write("Esta tabla consolida los fundamentos legales y los mecanismos voluntarios que estructuran la movilización de capital ambiental en Colombia.")
+        st.dataframe(df_normatividad, use_container_width=True)
+        st.caption("Fuentes: Ley 99 de 1993, Decretos Reglamentarios (MinAmbiente), y reportes de sostenibilidad corporativa (ESG).")
 
 # --- MÓDULO 2: EL EMBUDO DE LA VERDAD ---
 elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
@@ -186,6 +229,13 @@ elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
     
     # Usamos st.warning para resaltar visualmente el problema de la brecha
     st.warning(texto_analisis, icon="⚠️")
+
+    with st.expander("📖 Metodología de Análisis: La Brecha de Ejecución"):
+        st.markdown("""
+        * **Método de Visualización:** Diagrama de flujo de Sankey para mapear asimetrías de transferencia.
+        * **Definición de Brecha:** Se calcula como la diferencia matemática entre el recaudo bruto (obligatorio o voluntario) y el volumen de capital efectivamente convertido en infraestructura verde u obras estructurales en campo.
+        * **Causas Frecuentes:** Costos de transacción administrativos, fragmentación institucional, y tiempos de contratación prolongados que diluyen el valor del recurso en el tiempo.
+        """)
     
 # --- MÓDULO 3: VISOR GEOESPACIAL ---
 elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
@@ -219,6 +269,13 @@ elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
     st_folium(m, width=1200, height=600)
     
     st.success("El módulo ajusta la escala espacial y disposición geográfica de La Fe y Piedras Blancas, y mantiene la configuración de elevación del relleno sanitario a 1,000 metros sobre el nivel del mar para coincidir con el relieve geográfico.")
+
+    with st.expander("📖 Topografía y Rigor Cartográfico"):
+        st.markdown("""
+        * **Georreferenciación:** Sistema de Coordenadas WGS84 con renderizado topográfico libre.
+        * **Precisión Altimétrica:** Las cotas de infraestructura crítica han sido configuradas estrictamente; por ejemplo, la ubicación del relleno sanitario respeta con exactitud su elevación geográfica real. 
+        * **Proporcionalidad:** El dimensionamiento de los radios de influencia para los embalses principales (La Fe y Piedras Blancas) ha sido corregido espacialmente para reflejar su escala y proximidad frente a los núcleos urbanos.
+        """)
 
 # --- MÓDULO 4: EL SIMULADOR DE FONDO COMÚN ---
 elif modulo_seleccionado == "⚙️ 4. Simulador: Fondo Común":
@@ -277,3 +334,10 @@ elif modulo_seleccionado == "⚙️ 4. Simulador: Fondo Común":
         st.plotly_chart(fig_sim, use_container_width=True)
         
         st.info(f"💡 **Insight Territorial:** Al unificar el **{porcentaje_fondo}%** de los recursos en un fondo común bajo el criterio de **{criterio_priorizacion}**, la capacidad de restauración pasaría de {ha_base:,.0f} hectáreas a **{ha_proyectadas:,.0f} hectáreas**, eliminando esfuerzos duplicados en subcuencas.")
+
+    with st.expander("📖 Algoritmo de Optimización: El Fondo Común"):
+        st.markdown("""
+        * **Hipótesis del Modelo:** La concentración del capital disperso en un *Fondo Único Estratégico* reduce los costos de fricción y permite una planificación focalizada basada en el estrés hídrico de las cuencas.
+        * **Fórmula de Eficiencia:** $Eficiencia = (Ejecucion_{Base} / Recaudo) + (\% Fondo * \alpha_{Centralizacion})$. El coeficiente $\alpha$ representa el ahorro en economía de escala.
+        * **Referentes:** Esquemas de fondos de agua latinoamericanos y lineamientos de Soluciones Basadas en la Naturaleza (SbN) de la UICN.
+        """)
