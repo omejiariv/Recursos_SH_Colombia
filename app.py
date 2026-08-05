@@ -179,10 +179,6 @@ df_impacto = df_impacto_base[df_impacto_base['id_proyecto'].isin(df_ejecucion['i
 # -----------------------------------------------------------------------------
 # 3. Módulos
 
-if modulo_seleccionado == "📊 1. El Panorama Nacional vs. Regional":
-    st.title("Panorama de Recursos Ambientales e Hídricos")
-    st.write("Datos cargados correctamente. Aquí conectaremos las métricas generales.")
-
 # --- MÓDULO 1: EL PANORAMA ---
 if modulo_seleccionado == "📊 1. El Panorama Nacional vs. Regional":
     st.title("Panorama de Recursos Ambientales e Hídricos")
