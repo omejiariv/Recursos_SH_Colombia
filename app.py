@@ -52,7 +52,7 @@ def cargar_datos():
         'monto_recaudado': [50000000000, 120000000000, 35000000000, 15000000000, 80000000000]
     })
     
-    # 3. Ejecución de Proyectos (Agregamos la columna 'region')
+# 3. Ejecución de Proyectos (Agregamos la columna 'region')
     df_ejecucion = pd.DataFrame({
         'id_proyecto': ['P001', 'P002', 'P003', 'P004', 'P005'],
         'id_fuente': ['F001', 'F002', 'F003', 'F004', 'F005'],
@@ -68,17 +68,10 @@ def cargar_datos():
         'ha_restauradas': [120, 350, 80, 45, 200]
     })
     
+    # Único return válido para cerrar la función
     return df_normatividad, df_origenes, df_ejecucion, df_impacto
 
 df_normatividad, df_origenes, df_ejecucion_base, df_impacto = cargar_datos()
-    
-    # Consolidar datos para el análisis de flujo
-    df_flujo = pd.merge(df_origenes, df_ejecucion, on='id_fuente', how='left')
-    df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
-    
-    return df_origenes, df_ejecucion, df_impacto, df_flujo
-
-df_origenes, df_ejecucion, df_impacto, df_flujo = cargar_datos()
 
 # -----------------------------------------------------------------------------
 # 1. Configuración de la Página y Estética General
