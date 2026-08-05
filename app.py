@@ -127,36 +127,53 @@ with st.sidebar:
 # -----------------------------------------------------------------------------
 # Motor de Filtrado Dinámico (Pandas Pipeline)
 # -----------------------------------------------------------------------------
-anio_inicio, anio_fin = anio_fiscal # Desempacamos los años reales
+anio_inicio, anio_fin = anio_fiscal 
 
-# 1. Filtro Temporal ESTRICTO para la tabla oficial de Ingresos Corrientes (Módulo 5)
-df_ic = df_ic_base[
-    (df_ic_base['Año'] >= anio_inicio) & 
-    (df_ic_base['Año'] <= anio_fin)
-]
+# 1. Filtro Temporal ESTRICTO para TerriData
+df_ic = df_ic_base[(df_ic_base['Año'] >= anio_inicio) & (df_ic_base['Año'] <= anio_fin)]
 
-# 2. Lógica Territorial de Transición (Para proteger los Módulos 1 al 4)
+# 2. Cálculo EXACTO del 1% según geografía (Esto conecta el Módulo 5 con el resto)
 if region == "Toda Colombia":
-    filtro_regiones = df_ejecucion_base['region'].unique()
-elif region == "Antioquia":
-    if municipio_seleccionado == "Todos":
-        # Mantenemos las regiones simuladas temporalmente para no romper la vista
-        filtro_regiones = ['Antioquia', 'Valle de Aburrá'] 
+    recaudo_real_1_pct = df_ic[df_ic['Departamento'] == 'Colombia']['Minimo_1_Porciento'].sum()
+    filtro_ejecucion = df_ejecucion_base['region'].unique()
+    factor_escala = 1.0 # 100% de la ejecución simulada
+else: # Antioquia
+    df_ant = df_ic[(df_ic['Departamento'] == 'Antioquia') & (df_ic['Municipio'] != 'Antioquia')]
+    
+    if municipio_seleccionado != "Todos":
+        df_ant = df_ant[df_ant['Municipio'] == municipio_seleccionado]
+        filtro_ejecucion = [municipio_seleccionado]
+        factor_escala = 0.05 # Reducimos la ejecución simulada para escala municipal
     else:
-        # Aquí en el futuro enlazaremos la ejecución específica por municipio
-        filtro_regiones = [municipio_seleccionado] 
+        filtro_ejecucion = ['Antioquia', 'Valle de Aburrá']
+        factor_escala = 0.15 # Antioquia representa aprox el 15% del país
+        
+    recaudo_real_1_pct = df_ant['Minimo_1_Porciento'].sum()
 
-# Aplicamos filtro a la ejecución (si el municipio no tiene obras simuladas, no se rompe, solo queda en blanco)
-df_ejecucion = df_ejecucion_base[df_ejecucion_base['region'].isin(filtro_regiones)]
+# 3. EL PUENTE: Inyectar la realidad a los Módulos 1 al 4
+df_origenes_dinamico = df_origenes.copy()
 
-# 3. Recálculo del Flujo Financiero Principal
-df_flujo = pd.merge(df_origenes, df_ejecucion, on='id_fuente', how='inner')
-if not df_flujo.empty:
-    df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
-else:
-    df_flujo['brecha_perdida'] = 0
+# A. Reemplazamos el recaudo estático por el cálculo REAL del DNP
+df_origenes_dinamico.loc[df_origenes_dinamico['id_fuente'] == 'F001', 'monto_recaudado'] = recaudo_real_1_pct
 
-# 4. Filtrar tabla de impactos territoriales
+# B. Escalamos los otros recursos simulados (Sector eléctrico, ESG) para coherencia territorial
+df_origenes_dinamico.loc[df_origenes_dinamico['id_fuente'] == 'F002', 'monto_recaudado'] *= factor_escala
+df_origenes_dinamico.loc[df_origenes_dinamico['id_fuente'] == 'F003', 'monto_recaudado'] *= factor_escala
+
+# 4. Filtrar y escalar tabla de ejecución (proyectos)
+df_ejecucion = df_ejecucion_base[df_ejecucion_base['region'].isin(filtro_ejecucion)].copy()
+if not df_ejecucion.empty:
+    df_ejecucion['monto_real_invertido'] *= factor_escala
+
+# 5. Flujo financiero principal
+# Usamos 'left' intencionalmente para que los recursos recaudados que NO tengan ejecución 
+# sigan apareciendo y muestren una brecha del 100%.
+df_flujo = pd.merge(df_origenes_dinamico, df_ejecucion, on='id_fuente', how='left').fillna(0)
+df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
+# Evitar brechas negativas en la simulación
+df_flujo['brecha_perdida'] = df_flujo['brecha_perdida'].clip(lower=0) 
+
+# 6. Filtrar impactos
 df_impacto = df_impacto_base[df_impacto_base['id_proyecto'].isin(df_ejecucion['id_proyecto'])]
 
 # -----------------------------------------------------------------------------
