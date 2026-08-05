@@ -66,8 +66,29 @@ def cargar_datos():
         'ha_restauradas': [120, 350, 80, 45, 200]
     })
     
-    # Único return válido para cerrar la función
-    return df_normatividad, df_origenes, df_ejecucion, df_impacto
+    # 4. Datos de Ingresos Corrientes (Simulación 2020-2026 para Módulo 5)
+    import random
+    anios = list(range(2020, 2027))
+    deptos = ['Toda Colombia', 'Antioquia', 'Valle del Cauca', 'Cundinamarca', 'Atlántico']
+    datos_ic = []
+    
+    for d in deptos:
+        base_ingresos = 15000000000000 if d == 'Toda Colombia' else random.randint(1000000000000, 5000000000000)
+        for a in anios:
+            crecimiento = random.uniform(1.03, 1.08)
+            base_ingresos = base_ingresos * crecimiento
+            minimo_ley = base_ingresos * 0.01
+            datos_ic.append({
+                'Departamento': d, 
+                'Año': a, 
+                'Ingresos_Corrientes': base_ingresos, 
+                'Minimo_1_Porciento': minimo_ley
+            })
+            
+    df_ingresos_corrientes = pd.DataFrame(datos_ic)
+    
+    # Único return válido para cerrar la función (Entregando exactamente los 5 dataframes)
+    return df_normatividad, df_origenes, df_ejecucion, df_impacto, df_ingresos_corrientes
 
 df_normatividad, df_origenes, df_ejecucion_base, df_impacto_base, df_ic = cargar_datos()
 
