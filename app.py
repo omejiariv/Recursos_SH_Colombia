@@ -331,14 +331,18 @@ elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
               source = source,
               target = target,
               value = value,
-              color = "rgba(189, 195, 199, 0.4)" # Gris semitransparente para los flujos
-          ))])
+              color = "rgba(189, 195, 199, 0.4)" 
+          ),
+          textfont=dict(color="black", size=14, family="Arial") # FUENTE FORZADA: Tamaño más grande y color sólido
+        )])
           
         fig_sankey.update_layout(
             title_text="Diagrama de Flujo del Ecosistema Financiero Ambiental", 
-            font_size=12,
-            height=500,
-            margin=dict(t=40, b=20, l=20, r=20)
+            font_size=14, # Tamaño base de la fuente aumentado
+            height=600,   # Aumentamos un poco la altura para darle más "aire" a los nodos
+            margin=dict(t=40, b=20, l=20, r=20),
+            plot_bgcolor='white',
+            paper_bgcolor='white'
         )
         
         st.plotly_chart(fig_sankey, use_container_width=True)
