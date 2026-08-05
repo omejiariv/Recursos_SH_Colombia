@@ -6,70 +6,72 @@ from streamlit_folium import st_folium
 import random
 
 # -----------------------------------------------------------------------------
-# 0. Carga y Procesamiento de Datos Base
+# 0. Carga y Procesamiento de Datos Base (ETL desde archivo oficial DNP)
 # -----------------------------------------------------------------------------
-import random
-
 @st.cache_data
 def cargar_datos():
-    # 1. Catálogo Normativo
+    # 1. Catálogo Normativo (Mantenemos la base legal intacta)
     df_normatividad = pd.DataFrame({
         'Instrumento': ['Art. 111 (Ley 99/93) - 1% ICLD', 'Transferencias Sector Eléctrico', 'Tasa por Uso', 'Tasa Retributiva', 'Inversión Forzosa 1%', 'PSA', 'Recursos ESG'],
         'Tipo': ['Ley', 'Ley', 'Ley', 'Ley', 'Ley', 'Mixto', 'Voluntario']
     })
 
-    # 2. Orígenes y 3. Ejecución (Con columna de vigencia agregada)
+    # 2. Ingesta del Archivo Oficial DNP (TerriData)
+    try:
+        # Cargar el archivo directamente desde el repositorio
+        df_terridata = pd.read_excel('TerriData_Dim7_Finanzas.xlsx')
+        
+        # Filtrar únicamente la variable de interés
+        df_ic_raw = df_terridata[df_terridata['Indicador'] == 'Ingresos corrientes'].copy()
+        
+        # Función de limpieza de moneda (Transformación)
+        def limpiar_moneda(valor):
+            if pd.isna(valor):
+                return 0
+            if isinstance(valor, str):
+                # Limpiar formato europeo (ej. 1.029.659,00)
+                valor = valor.replace('.', '').replace(',', '.')
+            return float(valor) * 1_000_000 # Convertir de millones a COP exactos
+            
+        df_ic_raw['Ingresos_Corrientes'] = df_ic_raw['Dato Numérico'].apply(limpiar_moneda)
+        df_ic_raw['Minimo_1_Porciento'] = df_ic_raw['Ingresos_Corrientes'] * 0.01
+        
+        # Estandarizar columnas para los Módulos del Tablero
+        df_ic = df_ic_raw[['Departamento', 'Entidad', 'Año', 'Ingresos_Corrientes', 'Minimo_1_Porciento']]
+        df_ic = df_ic.rename(columns={'Entidad': 'Municipio'})
+        
+    except Exception as e:
+        # Mensaje de alerta por si Streamlit Cloud no encuentra el archivo temporalmente
+        st.error(f"Error en el ETL: No se pudo procesar el archivo TerriData. Revisa los logs. Error: {e}")
+        df_ic = pd.DataFrame(columns=['Departamento', 'Municipio', 'Año', 'Ingresos_Corrientes', 'Minimo_1_Porciento'])
+
+    # 3. Bases Temporales de Ejecución (Datos mínimos estandarizados para no romper los Módulos 1 al 4)
     df_origenes = pd.DataFrame({
-        'id_fuente': ['F001', 'F002', 'F003', 'F004', 'F005'],
-        'tipo_recurso': ['Ley (Inversión 1%)', 'Ley (Transferencias)', 'Voluntario (Fondo)', 'Voluntario (ESG)', 'Ley (SGP)'],
-        'entidad_recaudadora': ['Municipios/Gobernaciones', 'Sector Eléctrico', 'Fondo de Agua', 'Empresa Privada', 'Sistema General'],
-        'monto_recaudado': [1340000000000, 850000000000, 150000000000, 50000000000, 600000000000] 
+        'id_fuente': ['F001', 'F002', 'F003'],
+        'tipo_recurso': ['Ley (Inversión 1%)', 'Ley (Transferencias)', 'Voluntario (Fondo)'],
+        'entidad_recaudadora': ['Municipios/Gobernaciones', 'Sector Eléctrico', 'Fondo de Agua'],
+        'monto_recaudado': [1340000000000, 850000000000, 150000000000] 
     })
     
     df_ejecucion = pd.DataFrame({
-        'id_proyecto': ['P001', 'P002', 'P003', 'P004', 'P005'],
-        'id_fuente': ['F001', 'F002', 'F003', 'F004', 'F005'],
-        'monto_real_invertido': [30000000000, 90000000000, 32000000000, 10000000000, 40000000000],
-        'entidad_ejecutora': ['ONG Territorial', 'Operador Hídrico', 'Corporación Cuenca', 'Junta de Acción Local', 'Municipio'],
-        'lat': [6.1158, 6.2917, 6.3500, 6.0500, 8.5000],
-        'lon': [-75.4983, -75.5011, -75.5500, -75.6000, -76.0000],
-        'region': ['Valle de Aburrá', 'Valle de Aburrá', 'Antioquia', 'Valle de Aburrá', 'Toda Colombia'],
-        'vigencia': [2024, 2025, 2024, 2026, 2025] # Nueva columna para el filtro de años
+        'id_proyecto': ['P001', 'P002'],
+        'id_fuente': ['F001', 'F002'],
+        'monto_real_invertido': [30000000000, 90000000000],
+        'entidad_ejecutora': ['ONG Territorial', 'Operador Hídrico'],
+        'lat': [6.1158, 6.2917],
+        'lon': [-75.4983, -75.5011],
+        'region': ['Valle de Aburrá', 'Antioquia'],
+        'vigencia': [2024, 2024]
     })
     
     df_impacto = pd.DataFrame({
-        'id_proyecto': ['P001', 'P002', 'P003', 'P004', 'P005'],
-        'ha_restauradas': [120, 350, 80, 45, 200]
+        'id_proyecto': ['P001', 'P002'],
+        'ha_restauradas': [120, 350]
     })
-    
-    # 4. Datos de Ingresos Corrientes a Nivel Municipal
-    anios = list(range(2020, 2027))
-    
-    # Simulamos una lista representativa de municipios de Antioquia (descendente)
-    municipios_ant = ['Medellín', 'Bello', 'Itagüí', 'Envigado', 'Rionegro', 'Apartadó', 'Turbo', 'Caucasia', 'Guarne', 'El Retiro', 'Marinilla', 'La Ceja', 'Santa Fe de Antioquia', 'Murindó', 'Vigía del Fuerte']
-    
-    datos_ic = []
-    
-    # Generador para Antioquia
-    presupuesto_base = 6000000000000 # Arrancamos con 6 Billones para Medellín
-    for mpio in municipios_ant:
-        for a in anios:
-            crecimiento = random.uniform(1.02, 1.07)
-            presupuesto_base = presupuesto_base * crecimiento
-            datos_ic.append({
-                'Departamento': 'Antioquia', 
-                'Municipio': mpio,
-                'Año': a, 
-                'Ingresos_Corrientes': presupuesto_base, 
-                'Minimo_1_Porciento': presupuesto_base * 0.01
-            })
-        # Reducimos drásticamente el presupuesto base para el siguiente municipio (curva descendente)
-        presupuesto_base = presupuesto_base * 0.45 
-        
-    df_ingresos_corrientes = pd.DataFrame(datos_ic)
-    
-    return df_normatividad, df_origenes, df_ejecucion, df_impacto, df_ingresos_corrientes
 
+    return df_normatividad, df_origenes, df_ejecucion, df_impacto, df_ic
+
+# Llamado al ETL y despliegue de los 5 dataframes
 df_normatividad, df_origenes, df_ejecucion_base, df_impacto_base, df_ic_base = cargar_datos()
 
 # -----------------------------------------------------------------------------
