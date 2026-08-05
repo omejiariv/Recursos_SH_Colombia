@@ -342,7 +342,7 @@ elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
 # --- MÓDULO 3: VISOR GEOESPACIAL ---
 elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
     st.title("Impacto Territorial y Escala Espacial")
-    st.markdown("Mapeo topográfico de intervenciones e infraestructura hídrica regional.")
+    st.write("Mapeo topográfico de intervenciones, infraestructura hídrica regional y predios de conservación.")
     
     # Coordenadas y radios ajustados
     mapa_data = [
@@ -353,7 +353,7 @@ elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
     ]
 
     # Crear mapa base con OpenTopoMap (Ideal para cuencas hidrográficas)
-    m = folium.Map(location=[6.2518, -75.5636], zoom_start=10, tiles="OpenTopoMap")
+    m = folium.Map(location=[6.4500, -75.5500], zoom_start=9, tiles='OpenTopoMap')
 
     # Agregar círculos proporcionales
     for d in mapa_data:
@@ -367,35 +367,32 @@ elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
             popup=f"<b>{d['hitos']}</b><br>Cota: {d['cota']} msnm"
         ).add_to(m)
 
-        # --- CAPA: PREDIOS EJECUTADOS (GEOJSON) ---
-        ruta_geojson = 'data/PrediosEjecutados.geojson'
-        try:
-            folium.GeoJson(
-                ruta_geojson,
-                name="Predios Intervenidos",
-                style_function=lambda feature: {
-                    'fillColor': '#2ecc71', # Verde esmeralda para conservación
-                    'color': '#27ae60',     # Borde verde oscuro
-                    'weight': 1.5,
-                    'fillOpacity': 0.6,
-                }
-            ).add_to(m)
-        except Exception as e:
-            st.warning(f"⚠️ Capa de predios no encontrada. Verifica la ruta '{ruta_geojson}'. Error interno: {e}")
+        # 2. Inyectar el GeoJSON
+    ruta_geojson = 'data/PrediosEjecutados.geojson'
+    try:
+        folium.GeoJson(
+            ruta_geojson,
+            name="Predios Intervenidos",
+            style_function=lambda feature: {
+                'fillColor': '#2ecc71', 
+                'color': '#27ae60',     
+                'weight': 1.5,
+                'fillOpacity': 0.6,
+            }
+        ).add_to(m)
+    except Exception as e:
+        st.warning(f"⚠️ Capa de predios no encontrada. Error: {e}")
 
-        # Agregamos el control de capas para que el usuario pueda prender o apagar los predios
-        folium.LayerControl().add_to(m)
+    folium.LayerControl().add_to(m)
     
-    # Renderizar en Streamlit
-    st_folium(m, width=1200, height=600)
+    # 3. Renderizar el mapa
+    st_folium(m, width=800, height=600, returned_objects=[])
     
-    st.success("El módulo ajusta la escala espacial y disposición geográfica de La Fe y Piedras Blancas, y mantiene la configuración de elevación del relleno sanitario a 1,000 metros sobre el nivel del mar para coincidir con el relieve geográfico.")
-
+    # 4. Expander de metodología
     with st.expander("📖 Topografía y Rigor Cartográfico"):
         st.markdown("""
         * **Georreferenciación:** Sistema de Coordenadas WGS84 con renderizado topográfico libre.
-        * **Precisión Altimétrica:** Las cotas de infraestructura crítica han sido configuradas estrictamente; por ejemplo, la ubicación del relleno sanitario respeta con exactitud su elevación geográfica real. 
-        * **Proporcionalidad:** El dimensionamiento de los radios de influencia para los embalses principales (La Fe y Piedras Blancas) ha sido corregido espacialmente para reflejar su escala y proximidad frente a los núcleos urbanos.
+        * **Polígonos de Ejecución:** La capa verde renderiza directamente el archivo vectorial oficial de los predios, mostrando la huella espacial exacta donde se ha focalizado la inversión hídrica.
         """)
 
 # --- MÓDULO 4: EL SIMULADOR DE FONDO COMÚN ---
