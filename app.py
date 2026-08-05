@@ -132,87 +132,127 @@ anio_inicio, anio_fin = anio_fiscal
 # 1. Filtro Temporal ESTRICTO para TerriData
 df_ic = df_ic_base[(df_ic_base['Año'] >= anio_inicio) & (df_ic_base['Año'] <= anio_fin)]
 
-# 2. Cálculo EXACTO del 1% según geografía (Esto conecta el Módulo 5 con el resto)
+# 2. Cálculo EXACTO del 1% y Escala Proporcional
 if region == "Toda Colombia":
     recaudo_real_1_pct = df_ic[df_ic['Departamento'] == 'Colombia']['Minimo_1_Porciento'].sum()
     filtro_ejecucion = df_ejecucion_base['region'].unique()
-    factor_escala = 1.0 # 100% de la ejecución simulada
-else: # Antioquia
+    factor_escala = 1.0 
+    ruta_seleccion = "Toda Colombia" # Ruta para la UI
+else:
+    # Datos solo de Antioquia
     df_ant = df_ic[(df_ic['Departamento'] == 'Antioquia') & (df_ic['Municipio'] != 'Antioquia')]
+    total_antioquia_ic = df_ant['Ingresos_Corrientes'].sum() # Base para la regla de tres
     
     if municipio_seleccionado != "Todos":
-        df_ant = df_ant[df_ant['Municipio'] == municipio_seleccionado]
-        filtro_ejecucion = [municipio_seleccionado]
-        factor_escala = 0.05 # Reducimos la ejecución simulada para escala municipal
-    else:
-        filtro_ejecucion = ['Antioquia', 'Valle de Aburrá']
-        factor_escala = 0.15 # Antioquia representa aprox el 15% del país
+        df_mun = df_ant[df_ant['Municipio'] == municipio_seleccionado]
+        recaudo_real_1_pct = df_mun['Minimo_1_Porciento'].sum()
         
-    recaudo_real_1_pct = df_ant['Minimo_1_Porciento'].sum()
+        # EL ARREGLO MATEMÁTICO: Escala proporcional según el peso económico real del municipio
+        ingresos_mun = df_mun['Ingresos_Corrientes'].sum()
+        factor_escala = ingresos_mun / total_antioquia_ic if total_antioquia_ic > 0 else 0
+        
+        filtro_ejecucion = [municipio_seleccionado]
+        ruta_seleccion = f"{municipio_seleccionado} - {region}" # Ruta específica
+    else:
+        recaudo_real_1_pct = df_ant['Minimo_1_Porciento'].sum()
+        filtro_ejecucion = ['Antioquia', 'Valle de Aburrá']
+        factor_escala = 0.15 # Factor departamental aprox
+        ruta_seleccion = region
 
 # 3. EL PUENTE: Inyectar la realidad a los Módulos 1 al 4
 df_origenes_dinamico = df_origenes.copy()
-
-# A. Reemplazamos el recaudo estático por el cálculo REAL del DNP
 df_origenes_dinamico.loc[df_origenes_dinamico['id_fuente'] == 'F001', 'monto_recaudado'] = recaudo_real_1_pct
-
-# B. Escalamos los otros recursos simulados (Sector eléctrico, ESG) para coherencia territorial
 df_origenes_dinamico.loc[df_origenes_dinamico['id_fuente'] == 'F002', 'monto_recaudado'] *= factor_escala
 df_origenes_dinamico.loc[df_origenes_dinamico['id_fuente'] == 'F003', 'monto_recaudado'] *= factor_escala
 
-# 4. Filtrar y escalar tabla de ejecución (proyectos)
+# 4. Filtrar y escalar ejecución
 df_ejecucion = df_ejecucion_base[df_ejecucion_base['region'].isin(filtro_ejecucion)].copy()
 if not df_ejecucion.empty:
     df_ejecucion['monto_real_invertido'] *= factor_escala
 
-# 5. Flujo financiero principal
-# Usamos 'left' intencionalmente para que los recursos recaudados que NO tengan ejecución 
-# sigan apareciendo y muestren una brecha del 100%.
+# 5. Flujo financiero y Brecha
 df_flujo = pd.merge(df_origenes_dinamico, df_ejecucion, on='id_fuente', how='left').fillna(0)
 df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
-# Evitar brechas negativas en la simulación
 df_flujo['brecha_perdida'] = df_flujo['brecha_perdida'].clip(lower=0) 
 
-# 6. Filtrar impactos
+# 6. Impactos
 df_impacto = df_impacto_base[df_impacto_base['id_proyecto'].isin(df_ejecucion['id_proyecto'])]
 
 # -----------------------------------------------------------------------------
 # 3. Módulos
 
-# --- MÓDULO 1: EL PANORAMA ---
+# --- MÓDULO 1: EL PANORAMA NACIONAL VS. REGIONAL ---
 if modulo_seleccionado == "📊 1. El Panorama Nacional vs. Regional":
     st.title("Panorama de Recursos Ambientales e Hídricos")
-    st.markdown(f"**Área de análisis actual:** {region}")
     
-    st.write("""
-    En esta sección presentamos los KPIs principales del sistema financiero ambiental: 
-    Total recaudado vs. Total ejecutado en campo.
-    """)
+    # 1. RUTA DE SELECCIÓN Y CONTEXTO
+    st.info(f"📍 **Área de análisis actual:** `{ruta_seleccion}` | 📅 **Vigencia Fiscal:** `{anio_inicio} - {anio_fin}`")
+    st.markdown("En esta sección presentamos los KPIs principales del ecosistema financiero ambiental de la región seleccionada.")
     
-    # Cálculos dinámicos para los KPIs basados en el DataFrame
     total_recaudado = df_flujo['monto_recaudado'].sum()
     total_ejecutado = df_flujo['monto_real_invertido'].sum()
-    brecha = total_recaudado - total_ejecutado
-    eficiencia = (total_ejecutado / total_recaudado) * 100
-    
-    recursos_ley = df_flujo[df_flujo['tipo_recurso'].str.contains('Ley')]['monto_recaudado'].sum()
-    recursos_voluntarios = df_flujo[df_flujo['tipo_recurso'].str.contains('Voluntario')]['monto_recaudado'].sum()
+    brecha = df_flujo['brecha_perdida'].sum()
+    eficiencia = (total_ejecutado / total_recaudado) * 100 if total_recaudado > 0 else 0
 
-    # Renderizado de métricas en columnas (Layout)
+    # 2. MÉTRICAS CON TOOLTIPS (HELPS)
+    st.markdown("### Resumen Macro")
     col1, col2, col3 = st.columns(3)
-    col1.metric(label="Total Recaudado", value=f"${total_recaudado:,.0f}")
-    col2.metric(label="Inversión Real Ejecutada", value=f"${total_ejecutado:,.0f}", delta=f"-${brecha:,.0f} (Brecha)", delta_color="inverse")
+    col1.metric(
+        label="Total Capital Movilizado", 
+        value=f"${total_recaudado:,.0f}",
+        help="Suma total de recursos de Ley (basado en el 1% de ingresos corrientes reales del DNP) y recursos proyectados (Sector Eléctrico y Voluntarios) para el área y tiempo seleccionados."
+    )
+    col2.metric(
+        label="Inversión Real Ejecutada", 
+        value=f"${total_ejecutado:,.0f}", 
+        delta=f"-${brecha:,.0f} (Brecha/Fricción)", 
+        delta_color="inverse",
+        help="Dinero que efectivamente se decantó en obras, proyectos e infraestructura en territorio."
+    )
     col3.metric(
         label="Eficiencia del Sistema", 
         value=f"{eficiencia:.1f}%",
-        help="Método de cálculo: (Inversión Real Ejecutada / Total Recaudado) * 100. Este indicador representa el porcentaje del capital que efectivamente se convierte en soluciones territoriales y obras en campo, tras descontar retenciones presupuestales, gastos burocráticos y tiempos muertos de contratación."
+        help="Porcentaje del capital que sobrevive a los costos de transacción, burocracia y tiempos muertos. Cálculo: (Inversión Ejecutada / Capital Movilizado) * 100."
     )
     
     st.markdown("---")
     
-    col4, col5 = st.columns(2)
-    col4.metric(label="Recursos de Ley", value=f"${recursos_ley:,.0f}")
-    col5.metric(label="Recursos Voluntarios (Privados/Fondos)", value=f"${recursos_voluntarios:,.0f}")
+    # 3. GRÁFICO Y DESGLOSE EN DOS COLUMNAS
+    st.markdown("### Composición del Capital Ambiental")
+    col_izq, col_der = st.columns([1, 1])
+    
+    with col_izq:
+        recursos_ley = df_flujo[df_flujo['tipo_recurso'].str.contains("Ley")]['monto_recaudado'].sum()
+        recursos_vol = df_flujo[df_flujo['tipo_recurso'].str.contains("Voluntario")]['monto_recaudado'].sum()
+        
+        st.metric("🏛️ Recursos de Ley (Mandatorios)", f"${recursos_ley:,.0f}", help="Incluye el Art. 111 (1% IC) y las Transferencias del Sector Eléctrico.")
+        st.metric("🤝 Recursos Voluntarios (Privados/Fondos)", f"${recursos_vol:,.0f}", help="Aportes ESG del sector corporativo y mecanismos de Fondos de Agua.")
+        
+        with st.expander("📖 Soporte Jurídico y Clasificación de Recursos"):
+            st.markdown("Esta tabla consolida los fundamentos legales que estructuran la movilización de capital.")
+            st.dataframe(df_normatividad, use_container_width=True)
+
+    with col_der:
+        # Gráfico de Dona con Plotly para darle vida visual al módulo
+        df_grafico = df_origenes_dinamico[df_origenes_dinamico['monto_recaudado'] > 0]
+        fig_dona = go.Figure(data=[go.Pie(
+            labels=df_grafico['tipo_recurso'], 
+            values=df_grafico['monto_recaudado'],
+            hole=.5,
+            marker_colors=['#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6'],
+            textinfo='percent'
+        )])
+        fig_dona.update_layout(
+            showlegend=True, 
+            legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+            margin=dict(t=10, b=10, l=10, r=10),
+            height=300
+        )
+        st.plotly_chart(fig_dona, use_container_width=True)
+
+    # 4. FUENTE DE DATOS PERMANENTE (Transparencia)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.caption("🔍 **Fuente Oficial de Datos:** Base construida sobre los reportes del *Departamento Nacional de Planeación (DNP) - TerriData* (Operaciones efectivas de caja). El cálculo del Art. 111 se deriva estrictamente de los ingresos corrientes históricos reportados por las entidades territoriales. Los recursos adicionales representan un factor de simulación escalado al peso económico del municipio.")
 
     with st.expander("📖 Soporte Jurídico y Clasificación de Recursos"):
         st.markdown("### Catálogo Normativo para la Protección del Agua")
