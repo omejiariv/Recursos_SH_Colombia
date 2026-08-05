@@ -391,7 +391,7 @@ elif modulo_seleccionado == "⚙️ 4. Simulador: Fondo Común":
         * **Referentes:** Esquemas de fondos de agua latinoamericanos y lineamientos de Soluciones Basadas en la Naturaleza (SbN) de la UICN.
         """)
 
-# --- MÓDULO 5: POTENCIAL DEL 1% (INGRESOS CORRIENTES) ---
+# --- MÓDULO 5: POTENCIAL DEL 1% (INGRESOS CORRIENTES - TERRIDATA) ---
 elif modulo_seleccionado == "💰 5. Potencial del 1% (Art. 111)":
     st.title("El Gigante Dormido: 1% de Ingresos Corrientes")
     st.write("""
@@ -399,58 +399,67 @@ elif modulo_seleccionado == "💰 5. Potencial del 1% (Art. 111)":
     a la adquisición y mantenimiento de áreas de importancia estratégica para la conservación de recursos hídricos.
     """)
     
-    # Selector de departamento 
-    depto_seleccionado = st.selectbox("Seleccione el Departamento para el análisis del 1%:", df_ic['Departamento'].unique())
-    
-    # Filtrar por departamento seleccionado
-    df_filtro_depto = df_ic[df_ic['Departamento'] == depto_seleccionado]
-    
-    # AGRUPACIÓN MUNICIPAL: Sumar los años seleccionados y ordenar de mayor a menor
-    df_mpios = df_filtro_depto.groupby('Municipio')[['Ingresos_Corrientes', 'Minimo_1_Porciento']].sum().reset_index()
-    df_mpios = df_mpios.sort_values(by='Ingresos_Corrientes', ascending=False)
+    # Filtramos la tabla ya recortada en tiempo (df_ic) según la región seleccionada
+    if region == "Toda Colombia":
+        # TerriData tiene a 'Colombia' como un departamento agrupado
+        df_filtro_espacial = df_ic[df_ic['Departamento'] == 'Colombia']
+        titulo_grafico = "Evolución Nacional de Ingresos y Obligación Ambiental (COP)"
+    else:
+        # Seleccionamos Antioquia, excluyendo el agregado departamental para ver solo municipios
+        df_filtro_espacial = df_ic[(df_ic['Departamento'] == 'Antioquia') & (df_ic['Municipio'] != 'Antioquia')]
+        
+        # Si el usuario eligió un municipio específico en la barra lateral, filtramos más
+        if municipio_seleccionado != "Todos":
+            df_filtro_espacial = df_filtro_espacial[df_filtro_espacial['Municipio'] == municipio_seleccionado]
+            
+        titulo_grafico = f"Distribución Municipal de Ingresos y Obligación Ambiental (COP) - {region}"
+
+    # AGRUPACIÓN: Sumar los años seleccionados (anio_inicio a anio_fin) y ordenar de mayor a menor
+    df_agrupado = df_filtro_espacial.groupby('Municipio')[['Ingresos_Corrientes', 'Minimo_1_Porciento']].sum().reset_index()
+    df_agrupado = df_agrupado.sort_values(by='Ingresos_Corrientes', ascending=False)
     
     # KPI Resumen
-    total_recaudo_potencial = df_mpios['Minimo_1_Porciento'].sum()
+    total_recaudo_potencial = df_agrupado['Minimo_1_Porciento'].sum()
     st.metric(
-        label=f"Potencial Total de Inversión ({anio_inicio}-{anio_fin}) - {depto_seleccionado}", 
+        label=f"Potencial Total de Inversión ({anio_inicio}-{anio_fin}) - {region}", 
         value=f"${total_recaudo_potencial:,.0f} COP"
     )
     
-    # Gráfica Plotly: Eje X = Municipios (Ordenados), Eje Y = Dinero
+    # Gráfica Plotly
     fig_ic = go.Figure()
     
     fig_ic.add_trace(go.Bar(
-        x=df_mpios['Municipio'], 
-        y=df_mpios['Ingresos_Corrientes'],
+        x=df_agrupado['Municipio'], 
+        y=df_agrupado['Ingresos_Corrientes'],
         name='Ingresos Corrientes Totales',
         marker_color='#bdc3c7'
     ))
     
     fig_ic.add_trace(go.Bar(
-        x=df_mpios['Municipio'], 
-        y=df_mpios['Minimo_1_Porciento'],
+        x=df_agrupado['Municipio'], 
+        y=df_agrupado['Minimo_1_Porciento'],
         name='1% Mandatorio (Conservación)',
         marker_color='#3498db'
     ))
     
     fig_ic.update_layout(
-        title=f"Distribución Municipal de Ingresos y Obligación Ambiental (COP) - {depto_seleccionado}",
+        title=titulo_grafico,
         barmode='overlay',
-        yaxis_type="log", # Escala logarítmica esencial para poder ver a Medellín y Murindó en la misma gráfica
+        yaxis_type="log", # Fundamental para ver a Medellín y a un municipio de sexta categoría en la misma gráfica sin que la barra menor desaparezca visualmente
         height=600,
-        xaxis_tickangle=-45 # Inclinamos los nombres de los municipios para que se lean bien
+        xaxis_tickangle=-45 # Inclinamos el texto para leer los 125 municipios
     )
     
     st.plotly_chart(fig_ic, use_container_width=True)
     
-    st.markdown("### Datos Detallados por Municipio")
-    st.dataframe(df_mpios.style.format({"Ingresos_Corrientes": "${:,.0f}", "Minimo_1_Porciento": "${:,.0f}"}), use_container_width=True)
+    st.markdown("### Datos Detallados")
+    st.dataframe(df_agrupado.style.format({"Ingresos_Corrientes": "${:,.0f}", "Minimo_1_Porciento": "${:,.0f}"}), use_container_width=True)
     
     # Botón de Descarga CSV
-    csv_ic = df_mpios.to_csv(index=False).encode('utf-8')
+    csv_ic = df_agrupado.to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="📥 Descargar Matriz Municipal (CSV)",
+        label="📥 Descargar Matriz Oficial (CSV)",
         data=csv_ic,
-        file_name=f"Ingresos_Corrientes_{depto_seleccionado}_{anio_inicio}_{anio_fin}.csv",
+        file_name=f"Ingresos_Corrientes_TerriData_{region}_{anio_inicio}_{anio_fin}.csv",
         mime="text/csv",
     )
