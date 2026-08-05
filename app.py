@@ -19,7 +19,7 @@ def cargar_datos():
     # 2. Ingesta del Archivo Oficial DNP (TerriData)
     try:
         # Cargar el archivo directamente desde el repositorio
-        df_terridata = pd.read_excel('TerriData_Dim7_Finanzas.xlsx')
+        df_terridata = pd.read_excel('data/TerriData_Dim7_Finanzas.xlsx')
         
         # Filtrar únicamente la variable de interés
         df_ic_raw = df_terridata[df_terridata['Indicador'] == 'Ingresos corrientes'].copy()
