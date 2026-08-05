@@ -401,7 +401,7 @@ elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
             st.warning(f"⚠️ Error cargando Áreas Intervenidas: {e}")
 
         # --- CAPA 2: Áreas Protegidas SIDAP ---
-        ruta_sidap = 'data/AreasProtegidasSIDAP.json'
+        ruta_sidap = 'data/AreasProtegidas_SIDAP.geojson'
         try:
             folium.GeoJson(
                 ruta_sidap,
