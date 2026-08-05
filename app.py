@@ -8,50 +8,24 @@ import random
 # -----------------------------------------------------------------------------
 # 0. Carga y Procesamiento de Datos Base
 # -----------------------------------------------------------------------------
+import random
+
 @st.cache_data
 def cargar_datos():
-    # 1. Catálogo Normativo y Jurídico (NUEVO)
+    # 1. Catálogo Normativo
     df_normatividad = pd.DataFrame({
-        'Instrumento': [
-            'Art. 41 (Ley 99/93) - 1% Ingresos Corrientes', 
-            'Transferencias Sector Eléctrico (Ley 99, Art. 45)', 
-            'Tasa por Uso de Agua (Dec. 155/04)', 
-            'Tasa Retributiva (Dec. 2667/12)', 
-            'Inversión Forzosa 1% (Dec. 1900/06)', 
-            'Pago por Servicios Ambientales (Ley 870/17)', 
-            'Recursos ESG (Top 20 Empresas Privadas)'
-        ],
-        'Tipo': ['Ley', 'Ley', 'Ley', 'Ley', 'Ley', 'Mixto/Voluntario', 'Voluntario'],
-        'Entidad Gestora': [
-            'Municipios / Distritos', 
-            'Municipios (3%) / CARs (3%)', 
-            'Autoridades Ambientales (CAR/AMVA)', 
-            'Autoridades Ambientales (CAR/AMVA)', 
-            'Autoridades Ambientales', 
-            'MinAmbiente / Territorios', 
-            'Sector Privado / Fondos de Agua'
-        ],
-        'Destinación Específica': [
-            'Adquisición y mantenimiento de áreas de importancia hídrica.',
-            'Protección del medio ambiente y cuencas aportantes.',
-            'Protección y recuperación del recurso hídrico.',
-            'Proyectos de descontaminación hídrica territorial.',
-            'Recuperación, preservación y vigilancia de la cuenca.',
-            'Incentivos directos a propietarios rurales por conservación.',
-            'Sostenibilidad, compensación de huella hídrica y economía circular.'
-        ]
+        'Instrumento': ['Art. 111 (Ley 99/93) - 1% ICLD', 'Transferencias Sector Eléctrico', 'Tasa por Uso', 'Tasa Retributiva', 'Inversión Forzosa 1%', 'PSA', 'Recursos ESG'],
+        'Tipo': ['Ley', 'Ley', 'Ley', 'Ley', 'Ley', 'Mixto', 'Voluntario']
     })
 
-    # 2. Orígenes
+    # 2. Orígenes y 3. Ejecución (Con columna de vigencia agregada)
     df_origenes = pd.DataFrame({
         'id_fuente': ['F001', 'F002', 'F003', 'F004', 'F005'],
         'tipo_recurso': ['Ley (Inversión 1%)', 'Ley (Transferencias)', 'Voluntario (Fondo)', 'Voluntario (ESG)', 'Ley (SGP)'],
         'entidad_recaudadora': ['Municipios/Gobernaciones', 'Sector Eléctrico', 'Fondo de Agua', 'Empresa Privada', 'Sistema General'],
-        # Ajustamos el 1% a 1.34 Billones y escalamos el resto para coherencia
         'monto_recaudado': [1340000000000, 850000000000, 150000000000, 50000000000, 600000000000] 
     })
     
-    # 3. Ejecución de Proyectos (Agregamos la columna 'region')
     df_ejecucion = pd.DataFrame({
         'id_proyecto': ['P001', 'P002', 'P003', 'P004', 'P005'],
         'id_fuente': ['F001', 'F002', 'F003', 'F004', 'F005'],
@@ -59,7 +33,8 @@ def cargar_datos():
         'entidad_ejecutora': ['ONG Territorial', 'Operador Hídrico', 'Corporación Cuenca', 'Junta de Acción Local', 'Municipio'],
         'lat': [6.1158, 6.2917, 6.3500, 6.0500, 8.5000],
         'lon': [-75.4983, -75.5011, -75.5500, -75.6000, -76.0000],
-        'region': ['Valle de Aburrá', 'Valle de Aburrá', 'Antioquia', 'Valle de Aburrá', 'Toda Colombia'] # Clave para el filtro
+        'region': ['Valle de Aburrá', 'Valle de Aburrá', 'Antioquia', 'Valle de Aburrá', 'Toda Colombia'],
+        'vigencia': [2024, 2025, 2024, 2026, 2025] # Nueva columna para el filtro de años
     })
     
     df_impacto = pd.DataFrame({
@@ -67,31 +42,35 @@ def cargar_datos():
         'ha_restauradas': [120, 350, 80, 45, 200]
     })
     
-    # 4. Datos de Ingresos Corrientes (Simulación 2020-2026 para Módulo 5)
-    import random
+    # 4. Datos de Ingresos Corrientes a Nivel Municipal
     anios = list(range(2020, 2027))
-    deptos = ['Toda Colombia', 'Antioquia', 'Valle del Cauca', 'Cundinamarca', 'Atlántico']
+    
+    # Simulamos una lista representativa de municipios de Antioquia (descendente)
+    municipios_ant = ['Medellín', 'Bello', 'Itagüí', 'Envigado', 'Rionegro', 'Apartadó', 'Turbo', 'Caucasia', 'Guarne', 'El Retiro', 'Marinilla', 'La Ceja', 'Santa Fe de Antioquia', 'Murindó', 'Vigía del Fuerte']
+    
     datos_ic = []
     
-    for d in deptos:
-        base_ingresos = 15000000000000 if d == 'Toda Colombia' else random.randint(1000000000000, 5000000000000)
+    # Generador para Antioquia
+    presupuesto_base = 6000000000000 # Arrancamos con 6 Billones para Medellín
+    for mpio in municipios_ant:
         for a in anios:
-            crecimiento = random.uniform(1.03, 1.08)
-            base_ingresos = base_ingresos * crecimiento
-            minimo_ley = base_ingresos * 0.01
+            crecimiento = random.uniform(1.02, 1.07)
+            presupuesto_base = presupuesto_base * crecimiento
             datos_ic.append({
-                'Departamento': d, 
+                'Departamento': 'Antioquia', 
+                'Municipio': mpio,
                 'Año': a, 
-                'Ingresos_Corrientes': base_ingresos, 
-                'Minimo_1_Porciento': minimo_ley
+                'Ingresos_Corrientes': presupuesto_base, 
+                'Minimo_1_Porciento': presupuesto_base * 0.01
             })
-            
+        # Reducimos drásticamente el presupuesto base para el siguiente municipio (curva descendente)
+        presupuesto_base = presupuesto_base * 0.45 
+        
     df_ingresos_corrientes = pd.DataFrame(datos_ic)
     
-    # Único return válido para cerrar la función (Entregando exactamente los 5 dataframes)
     return df_normatividad, df_origenes, df_ejecucion, df_impacto, df_ingresos_corrientes
 
-df_normatividad, df_origenes, df_ejecucion_base, df_impacto_base, df_ic = cargar_datos()
+df_normatividad, df_origenes, df_ejecucion_base, df_impacto_base, df_ic_base = cargar_datos()
 
 # -----------------------------------------------------------------------------
 # 1. Configuración de la Página y Estética General
@@ -140,22 +119,35 @@ with st.sidebar:
 # -----------------------------------------------------------------------------
 # Motor de Filtrado Dinámico (Pandas Pipeline)
 # -----------------------------------------------------------------------------
+anio_inicio, anio_fin = anio_fiscal # Desempacamos el slider de la barra lateral
+
 # 1. Lógica de anidamiento territorial
 if region == "Valle de Aburrá":
     filtro_regiones = ['Valle de Aburrá']
 elif region == "Antioquia":
     filtro_regiones = ['Valle de Aburrá', 'Antioquia']
+elif region == "Cundinamarca":
+    filtro_regiones = ['Cundinamarca']
 else:
     filtro_regiones = df_ejecucion_base['region'].unique() # Toda Colombia
 
-# 2. Aplicar el filtro a la tabla de ejecución
-df_ejecucion = df_ejecucion_base[df_ejecucion_base['region'].isin(filtro_regiones)]
+# 2. Aplicar el filtro ESPACIAL y TEMPORAL a la tabla de ejecución
+df_ejecucion = df_ejecucion_base[
+    (df_ejecucion_base['region'].isin(filtro_regiones)) & 
+    (df_ejecucion_base['vigencia'] >= anio_inicio) & 
+    (df_ejecucion_base['vigencia'] <= anio_fin)
+]
 
-# 3. Filtrar también la tabla de impactos para el Simulador (Módulo 4)
+# 3. Filtrar tabla de impactos
 df_impacto = df_impacto_base[df_impacto_base['id_proyecto'].isin(df_ejecucion['id_proyecto'])]
 
-# 4. Recalcular el flujo financiero (Cambiamos 'left' por 'inner')
-# Así solo sumamos el recaudo de las fuentes que operan en la región seleccionada
+# 4. Filtrar tabla de Ingresos Corrientes (Módulo 5) por AÑO
+df_ic = df_ic_base[
+    (df_ic_base['Año'] >= anio_inicio) & 
+    (df_ic_base['Año'] <= anio_fin)
+]
+
+# 5. Recalcular el flujo financiero principal
 df_flujo = pd.merge(df_origenes, df_ejecucion, on='id_fuente', how='inner')
 df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
 
@@ -399,50 +391,58 @@ elif modulo_seleccionado == "💰 5. Potencial del 1% (Art. 111)":
     a la adquisición y mantenimiento de áreas de importancia estratégica para la conservación de recursos hídricos.
     """)
     
-    # Selector de departamento (Independiente del filtro global)
+    # Selector de departamento 
     depto_seleccionado = st.selectbox("Seleccione el Departamento para el análisis del 1%:", df_ic['Departamento'].unique())
     
-    # Filtrar datos
-    df_filtro_ic = df_ic[df_ic['Departamento'] == depto_seleccionado]
+    # Filtrar por departamento seleccionado
+    df_filtro_depto = df_ic[df_ic['Departamento'] == depto_seleccionado]
+    
+    # AGRUPACIÓN MUNICIPAL: Sumar los años seleccionados y ordenar de mayor a menor
+    df_mpios = df_filtro_depto.groupby('Municipio')[['Ingresos_Corrientes', 'Minimo_1_Porciento']].sum().reset_index()
+    df_mpios = df_mpios.sort_values(by='Ingresos_Corrientes', ascending=False)
     
     # KPI Resumen
-    total_recaudo_potencial = df_filtro_ic['Minimo_1_Porciento'].sum()
-    st.metric(label=f"Potencial Total de Inversión (2020-2026) - {depto_seleccionado}", value=f"${total_recaudo_potencial:,.0f} COP")
+    total_recaudo_potencial = df_mpios['Minimo_1_Porciento'].sum()
+    st.metric(
+        label=f"Potencial Total de Inversión ({anio_inicio}-{anio_fin}) - {depto_seleccionado}", 
+        value=f"${total_recaudo_potencial:,.0f} COP"
+    )
     
-    # Gráfica Plotly
+    # Gráfica Plotly: Eje X = Municipios (Ordenados), Eje Y = Dinero
     fig_ic = go.Figure()
-    # Barra de Ingresos Corrientes (Base)
+    
     fig_ic.add_trace(go.Bar(
-        x=df_filtro_ic['Año'], 
-        y=df_filtro_ic['Ingresos_Corrientes'],
-        name='Ingresos Corrientes',
+        x=df_mpios['Municipio'], 
+        y=df_mpios['Ingresos_Corrientes'],
+        name='Ingresos Corrientes Totales',
         marker_color='#bdc3c7'
     ))
-    # Barra del 1% Mandatorio
+    
     fig_ic.add_trace(go.Bar(
-        x=df_filtro_ic['Año'], 
-        y=df_filtro_ic['Minimo_1_Porciento'],
-        name='1% Mandatorio (Agua)',
+        x=df_mpios['Municipio'], 
+        y=df_mpios['Minimo_1_Porciento'],
+        name='1% Mandatorio (Conservación)',
         marker_color='#3498db'
     ))
     
     fig_ic.update_layout(
-        title=f"Evolución de Ingresos y Obligación Ambiental (COP) - {depto_seleccionado}",
+        title=f"Distribución Municipal de Ingresos y Obligación Ambiental (COP) - {depto_seleccionado}",
         barmode='overlay',
-        yaxis_type="log", # Usamos escala logarítmica porque la diferencia entre el 100% y el 1% es enorme visualmente
-        height=500
+        yaxis_type="log", # Escala logarítmica esencial para poder ver a Medellín y Murindó en la misma gráfica
+        height=600,
+        xaxis_tickangle=-45 # Inclinamos los nombres de los municipios para que se lean bien
     )
     
     st.plotly_chart(fig_ic, use_container_width=True)
     
-    st.markdown("### Datos Detallados")
-    st.dataframe(df_filtro_ic.style.format({"Ingresos_Corrientes": "${:,.0f}", "Minimo_1_Porciento": "${:,.0f}"}), use_container_width=True)
+    st.markdown("### Datos Detallados por Municipio")
+    st.dataframe(df_mpios.style.format({"Ingresos_Corrientes": "${:,.0f}", "Minimo_1_Porciento": "${:,.0f}"}), use_container_width=True)
     
     # Botón de Descarga CSV
-    csv_ic = df_filtro_ic.to_csv(index=False).encode('utf-8')
+    csv_ic = df_mpios.to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="📥 Descargar Datos (CSV)",
+        label="📥 Descargar Matriz Municipal (CSV)",
         data=csv_ic,
-        file_name=f"Ingresos_Corrientes_1Porciento_{depto_seleccionado}.csv",
+        file_name=f"Ingresos_Corrientes_{depto_seleccionado}_{anio_inicio}_{anio_fin}.csv",
         mime="text/csv",
     )
