@@ -339,60 +339,74 @@ elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
         * **Causas Frecuentes:** Costos de transacción administrativos, fragmentación institucional, y tiempos de contratación prolongados que diluyen el valor del recurso en el tiempo.
         """)
     
-# --- MÓDULO 3: VISOR GEOESPACIAL ---
+# --- MÓDULO 3: VISOR GEOESPACIAL DE IMPACTO ---
 elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
     st.title("Impacto Territorial y Escala Espacial")
-    st.write("Mapeo topográfico de intervenciones, infraestructura hídrica regional y predios de conservación.")
+    st.write("Mapeo topográfico de intervenciones, infraestructura hídrica regional y áreas de conservación.")
     
-    # Coordenadas y radios ajustados
-    mapa_data = [
-        {"hitos": "Embalse La Fe", "lat": 6.1158, "lon": -75.4983, "cota": 2100, "radio": 1200, "color": "#3498db"},
-        {"hitos": "Embalse Piedras Blancas", "lat": 6.2917, "lon": -75.5011, "cota": 2300, "radio": 900, "color": "#3498db"},
-        {"hitos": "Relleno Sanitario Regional", "lat": 6.3000, "lon": -75.5200, "cota": 1000, "radio": 500, "color": "#e74c3c"},
-        {"hitos": "Corredor Ribereño Norte", "lat": 6.3500, "lon": -75.5500, "cota": 1500, "radio": 800, "color": "#2ecc71"}
-    ]
-
-    # Crear mapa base con OpenTopoMap (Ideal para cuencas hidrográficas)
-    m = folium.Map(location=[6.4500, -75.5500], zoom_start=9, tiles='OpenTopoMap')
-
-    # Agregar círculos proporcionales
-    for d in mapa_data:
-        folium.Circle(
-            location=[d['lat'], d['lon']],
-            radius=d['radio'],
-            color=d['color'],
-            fill=True,
-            fill_color=d['color'],
-            fill_opacity=0.7,
-            popup=f"<b>{d['hitos']}</b><br>Cota: {d['cota']} msnm"
-        ).add_to(m)
-
-    # 2. Inyectar el GeoJSON
-    ruta_geojson = 'data/AreasintervenidasCV.geojson'
-    try:
-        folium.GeoJson(
-            ruta_geojson,
-            name="Areas intervenidasCV",
-            style_function=lambda feature: {
-                'fillColor': '#2ecc71', 
-                'color': '#27ae60',     
-                'weight': 1.5,
-                'fillOpacity': 0.6,
-            }
-        ).add_to(m)
-    except Exception as e:
-        st.warning(f"⚠️ Capa de predios no encontrada. Error: {e}")
-
-    folium.LayerControl().add_to(m)
+    # 1. Crear Layout: Mapa a la izquierda (70%), Panel a la derecha (30%)
+    col_mapa, col_info = st.columns([7, 3])
     
-    # 3. Renderizar el mapa
-    st_folium(m, width=800, height=600, returned_objects=[])
-    
-    # 4. Expander de metodología
+    with col_mapa:
+        # Centrado estratégico hacia el norte del Valle de Aburrá
+        m = folium.Map(location=[6.4500, -75.5500], zoom_start=9, tiles='OpenTopoMap')
+        
+        # --- CAPA 1: Áreas Intervenidas (CuencaVerde) ---
+        ruta_intervenciones = 'data/AreasintervenidasCV.geojson'
+        try:
+            folium.GeoJson(
+                ruta_intervenciones,
+                name="Áreas Intervenidas (CV)",
+                style_function=lambda x: {
+                    'fillColor': '#2ecc71', # Verde esmeralda
+                    'color': '#27ae60',
+                    'weight': 1.5,
+                    'fillOpacity': 0.6,
+                }
+            ).add_to(m)
+        except Exception as e:
+            st.warning(f"⚠️ Error cargando Áreas Intervenidas: {e}")
+
+        # --- CAPA 2: Áreas Protegidas SIDAP ---
+        ruta_sidap = 'data/AreasProtegidasSIDAP.json'
+        try:
+            folium.GeoJson(
+                ruta_sidap,
+                name="Áreas Protegidas (SIDAP)",
+                style_function=lambda x: {
+                    'fillColor': '#3498db', # Azul claro
+                    'color': '#2980b9',
+                    'weight': 1.5,
+                    'fillOpacity': 0.4,
+                }
+            ).add_to(m)
+        except Exception as e:
+            st.warning(f"⚠️ Error cargando SIDAP: {e}")
+
+        # Control para apagar/prender capas
+        folium.LayerControl().add_to(m)
+        
+        # Renderizar mapa (use_container_width expande el mapa al máximo de su columna)
+        st_folium(m, width=1000, height=650, use_container_width=True, returned_objects=[])
+
+    with col_info:
+        # 2. PANEL DE INFORMACIÓN DERECHO
+        st.markdown("### Contexto Territorial")
+        st.info("💡 **Dato Estratégico:** Las áreas de intervención buscan asegurar la oferta hídrica en las cuencas abastecedoras, conectando los esfuerzos de restauración focalizada con la red del SIDAP.")
+        
+        # Métricas de ejemplo (Se conectarán a los polígonos más adelante)
+        st.metric(label="Hectáreas bajo Conservación", value="Por calcular...")
+        st.metric(label="Inversión Focalizada", value="Por calcular...")
+        
+        st.markdown("---")
+        st.markdown("**Convenciones Cartográficas:**")
+        st.markdown("🟢 **Áreas Intervenidas (CV):** Polígonos de gestión, restauración y protección hídrica activa.")
+        st.markdown("🔵 **Áreas Protegidas (SIDAP):** Zonas de reserva oficial y figuras de protección institucional.")
+        
     with st.expander("📖 Topografía y Rigor Cartográfico"):
         st.markdown("""
         * **Georreferenciación:** Sistema de Coordenadas WGS84 con renderizado topográfico libre.
-        * **Polígonos de Ejecución:** La capa verde renderiza directamente el archivo vectorial oficial de los predios, mostrando la huella espacial exacta donde se ha focalizado la inversión hídrica.
+        * **Validación Espacial:** La superposición de capas permite identificar si la movilización de capital está ocurriendo dentro o fuera de las zonas núcleo de protección institucional.
         """)
 
 # --- MÓDULO 4: EL SIMULADOR DE FONDO COMÚN ---
