@@ -368,11 +368,11 @@ elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
         ).add_to(m)
 
     # 2. Inyectar el GeoJSON
-    ruta_geojson = 'data/PrediosEjecutados.geojson'
+    ruta_geojson = 'data/AreasintervenidasCV.geojson'
     try:
         folium.GeoJson(
             ruta_geojson,
-            name="Predios Intervenidos",
+            name="Areas intervenidasCV",
             style_function=lambda feature: {
                 'fillColor': '#2ecc71', 
                 'color': '#27ae60',     
