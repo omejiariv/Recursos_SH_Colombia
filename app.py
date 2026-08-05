@@ -42,15 +42,16 @@ def cargar_datos():
         ]
     })
 
-    # 2. Orígenes de Recursos
+    # 2. Orígenes
     df_origenes = pd.DataFrame({
         'id_fuente': ['F001', 'F002', 'F003', 'F004', 'F005'],
         'tipo_recurso': ['Ley (Inversión 1%)', 'Ley (Transferencias)', 'Voluntario (Fondo)', 'Voluntario (ESG)', 'Ley (SGP)'],
-        'entidad_recaudadora': ['Autoridad Ambiental Local', 'Sector Eléctrico', 'Fondo de Agua', 'Empresa Privada', 'Sistema General'],
-        'monto_recaudado': [50000000000, 120000000000, 35000000000, 15000000000, 80000000000]
+        'entidad_recaudadora': ['Municipios/Gobernaciones', 'Sector Eléctrico', 'Fondo de Agua', 'Empresa Privada', 'Sistema General'],
+        # Ajustamos el 1% a 1.34 Billones y escalamos el resto para coherencia
+        'monto_recaudado': [1340000000000, 850000000000, 150000000000, 50000000000, 600000000000] 
     })
     
-# 3. Ejecución de Proyectos (Agregamos la columna 'region')
+    # 3. Ejecución de Proyectos (Agregamos la columna 'region')
     df_ejecucion = pd.DataFrame({
         'id_proyecto': ['P001', 'P002', 'P003', 'P004', 'P005'],
         'id_fuente': ['F001', 'F002', 'F003', 'F004', 'F005'],
@@ -124,7 +125,16 @@ with st.sidebar:
     
     st.markdown("---")
     st.subheader("Filtros Globales")
-    region = st.selectbox("Región de Análisis", ["Toda Colombia", "Antioquia", "Valle de Aburrá"], index=2)
+    
+    region = st.selectbox("Región / Departamento", ["Toda Colombia", "Antioquia", "Cundinamarca", "Valle de Aburrá"], index=1)
+    
+    # Lógica condicional para el selector de municipios
+    municipio_seleccionado = "Todos"
+    if region == "Antioquia":
+        municipio_seleccionado = st.selectbox("Municipio Específico", ["Todos", "Medellín", "Guarne", "Rionegro", "El Retiro"])
+    elif region == "Cundinamarca":
+        municipio_seleccionado = st.selectbox("Municipio Específico", ["Todos", "Bogotá", "Chía", "Cajicá"])
+        
     anio_fiscal = st.slider("Vigencia Fiscal", 2020, 2026, (2024, 2026))
 
 # -----------------------------------------------------------------------------
@@ -179,7 +189,11 @@ if modulo_seleccionado == "📊 1. El Panorama Nacional vs. Regional":
     col1, col2, col3 = st.columns(3)
     col1.metric(label="Total Recaudado", value=f"${total_recaudado:,.0f}")
     col2.metric(label="Inversión Real Ejecutada", value=f"${total_ejecutado:,.0f}", delta=f"-${brecha:,.0f} (Brecha)", delta_color="inverse")
-    col3.metric(label="Eficiencia del Sistema", value=f"{eficiencia:.1f}%")
+    col3.metric(
+        label="Eficiencia del Sistema", 
+        value=f"{eficiencia:.1f}%",
+        help="Método de cálculo: (Inversión Real Ejecutada / Total Recaudado) * 100. Este indicador representa el porcentaje del capital que efectivamente se convierte en soluciones territoriales y obras en campo, tras descontar retenciones presupuestales, gastos burocráticos y tiempos muertos de contratación."
+    )
     
     st.markdown("---")
     
