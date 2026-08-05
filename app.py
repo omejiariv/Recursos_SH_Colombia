@@ -367,6 +367,25 @@ elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
             popup=f"<b>{d['hitos']}</b><br>Cota: {d['cota']} msnm"
         ).add_to(m)
 
+        # --- CAPA: PREDIOS EJECUTADOS (GEOJSON) ---
+        ruta_geojson = 'data/PrediosEjecutados.geojson'
+        try:
+            folium.GeoJson(
+                ruta_geojson,
+                name="Predios Intervenidos",
+                style_function=lambda feature: {
+                    'fillColor': '#2ecc71', # Verde esmeralda para conservación
+                    'color': '#27ae60',     # Borde verde oscuro
+                    'weight': 1.5,
+                    'fillOpacity': 0.6,
+                }
+            ).add_to(m)
+        except Exception as e:
+            st.warning(f"⚠️ Capa de predios no encontrada. Verifica la ruta '{ruta_geojson}'. Error interno: {e}")
+
+        # Agregamos el control de capas para que el usuario pueda prender o apagar los predios
+        folium.LayerControl().add_to(m)
+    
     # Renderizar en Streamlit
     st_folium(m, width=1200, height=600)
     
