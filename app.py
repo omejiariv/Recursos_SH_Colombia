@@ -161,6 +161,8 @@ else:
 
 # 3. EL PUENTE: Inyectar la realidad a los Módulos 1 al 4
 df_origenes_dinamico = df_origenes.copy()
+df_origenes_dinamico['monto_recaudado'] = df_origenes_dinamico['monto_recaudado'].astype(float)
+
 df_origenes_dinamico.loc[df_origenes_dinamico['id_fuente'] == 'F001', 'monto_recaudado'] = recaudo_real_1_pct
 df_origenes_dinamico.loc[df_origenes_dinamico['id_fuente'] == 'F002', 'monto_recaudado'] *= factor_escala
 df_origenes_dinamico.loc[df_origenes_dinamico['id_fuente'] == 'F003', 'monto_recaudado'] *= factor_escala
