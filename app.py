@@ -260,78 +260,95 @@ if modulo_seleccionado == "📊 1. El Panorama Nacional vs. Regional":
         st.dataframe(df_normatividad, use_container_width=True)
         st.caption("Fuentes: Ley 99 de 1993, Decretos Reglamentarios (MinAmbiente), y reportes de sostenibilidad corporativa (ESG).")
 
-# --- MÓDULO 2: EL EMBUDO DE LA VERDAD ---
+# --- MÓDULO 2: EL EMBUDO DE LA VERDAD (FLUJO) ---
 elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
-    st.title("La Brecha de Ejecución: Del Recaudo al Territorio")
-    st.write("""
-    Este diagrama rastrea el capital desde su origen (obligatorio o voluntario) 
-    hasta su destino final, evidenciando las ineficiencias, dispersión o recursos represados 
-    antes de materializarse en infraestructura verde y conservación de cuencas.
-    """)
+    st.title("El Embudo de la Verdad")
+    st.write("Rastreo de la eficiencia del capital: Desde el origen del recurso hasta la ejecución en territorio.")
     
-    fuentes = df_flujo['tipo_recurso'].tolist()
-    idx_ejecutada = len(fuentes)
-    idx_brecha = len(fuentes) + 1
-    
-    nodos_label = fuentes + ["Inversión Real en Campo", "Brecha de Ejecución (Represados)"]
-    nodos_color = ["#3498db" if "Ley" in f else "#2ecc71" for f in fuentes] + ["#27ae60", "#e74c3c"]
-    
-    origenes = []
-    destinos = []
-    valores = []
-    
-    for i, row in df_flujo.iterrows():
-        origenes.append(i)
-        destinos.append(idx_ejecutada)
-        valores.append(row['monto_real_invertido'])
+    st.info(f"📍 **Área de análisis:** `{ruta_seleccion}` | 📅 **Vigencia Fiscal:** `{anio_inicio} - {anio_fin}`")
+
+    # Si no hay datos de recaudo, mostramos una alerta para no romper el gráfico
+    if df_flujo['monto_recaudado'].sum() == 0:
+        st.warning("No hay recursos recaudados registrados para esta selección temporal y espacial.")
+    else:
+        # 1. PREPARACIÓN DE NODOS PARA EL SANKEY
+        # Identificamos las fuentes (origen) y los ejecutores (destino)
+        fuentes = df_flujo['tipo_recurso'].unique().tolist()
+        ejecutores = df_flujo[df_flujo['entidad_ejecutora'].notna()]['entidad_ejecutora'].unique().tolist()
+        nodo_brecha = "Brecha / Retención (Sin Ejecutar)"
         
-        origenes.append(i)
-        destinos.append(idx_brecha)
-        valores.append(row['brecha_perdida'])
+        # Lista maestra de nodos y su diccionario de índices (Plotly Sankey usa números, no nombres)
+        nodos = fuentes + ejecutores + [nodo_brecha]
+        nodo_indices = {nodo: i for i, nodo in enumerate(nodos)}
+        
+        source = []
+        target = []
+        value = []
+        
+        # 2. CONSTRUCCIÓN DE LOS ENLACES (LINKS)
+        for index, row in df_flujo.iterrows():
+            fuente_idx = nodo_indices[row['tipo_recurso']]
+            
+            # Camino A: El dinero que SÍ llegó a ejecutarse
+            if pd.notna(row['entidad_ejecutora']) and row['monto_real_invertido'] > 0:
+                ejecutor_idx = nodo_indices[row['entidad_ejecutora']]
+                source.append(fuente_idx)
+                target.append(ejecutor_idx)
+                value.append(row['monto_real_invertido'])
+                
+            # Camino B: La pérdida o brecha
+            if row['brecha_perdida'] > 0:
+                brecha_idx = nodo_indices[nodo_brecha]
+                source.append(fuente_idx)
+                target.append(brecha_idx)
+                value.append(row['brecha_perdida'])
 
-    fig = go.Figure(data=[go.Sankey(
-        node = dict(
-          pad = 20,
-          thickness = 30,
-          line = dict(color = "black", width = 0.5),
-          label = nodos_label,
-          color = nodos_color
-        ),
-        link = dict(
-          source = origenes,
-          target = destinos,
-          value = valores,
-          color = "rgba(189, 195, 199, 0.4)" 
+        # 3. COLORES DINÁMICOS
+        # Asignamos rojo a la brecha, verde a los ejecutores y azul a las fuentes
+        colores_nodos = []
+        for nodo in nodos:
+            if nodo == nodo_brecha:
+                colores_nodos.append("rgba(231, 76, 60, 0.8)") # Rojo
+            elif nodo in ejecutores:
+                colores_nodos.append("rgba(46, 204, 113, 0.8)") # Verde
+            else:
+                colores_nodos.append("rgba(52, 152, 219, 0.8)") # Azul
+
+        # 4. RENDERIZADO DEL GRÁFICO PLOTLY SANKEY
+        fig_sankey = go.Figure(data=[go.Sankey(
+            valueformat = ",.0f",
+            valuesuffix = " COP",
+            node = dict(
+              pad = 20,
+              thickness = 25,
+              line = dict(color = "black", width = 0.5),
+              label = nodos,
+              color = colores_nodos
+            ),
+            link = dict(
+              source = source,
+              target = target,
+              value = value,
+              color = "rgba(189, 195, 199, 0.4)" # Gris semitransparente para los flujos
+          ))])
+          
+        fig_sankey.update_layout(
+            title_text="Diagrama de Flujo del Ecosistema Financiero Ambiental", 
+            font_size=12,
+            height=500,
+            margin=dict(t=40, b=20, l=20, r=20)
         )
-    )])
-
-    fig.update_layout(
-        title_text="Flujo Financiero Ambiental (Cifras en COP)", 
-        font_size=12, 
-        height=600,
-        margin=dict(t=50, l=0, r=0, b=0)
-    )
-    
-    # Renderizado del gráfico
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Cálculos previos para el análisis de eficiencia
-    total_rec = df_flujo['monto_recaudado'].sum()
-    total_ejec = df_flujo['monto_real_invertido'].sum()
-    pct_brecha = (df_flujo['brecha_perdida'].sum() / total_rec) * 100
-    
-    # Texto de análisis con un enfoque técnico y expresivo
-    texto_analisis = (
-        f"**La Anatomía del Flujo y el Laberinto del Recurso:** De un volumen inicial de "
-        f"**${total_rec:,.0f}** movilizados en el papel, el diagrama revela que solo "
-        f"**${total_ejec:,.0f}** logran decantarse en soluciones tangibles en el territorio. "
-        f"La corriente financiera sufre una dispersión constante, dejando una brecha "
-        f"estructural del **{pct_brecha:.1f}%**."
-    )
-    
-    # Usamos st.warning para resaltar visualmente el problema de la brecha
-    st.warning(texto_analisis, icon="⚠️")
-
+        
+        st.plotly_chart(fig_sankey, use_container_width=True)
+        
+        with st.expander("📊 Ver matriz de datos del flujo"):
+            df_mostrar = df_flujo[['tipo_recurso', 'entidad_recaudadora', 'monto_recaudado', 'entidad_ejecutora', 'monto_real_invertido', 'brecha_perdida']]
+            st.dataframe(df_mostrar.style.format({
+                "monto_recaudado": "${:,.0f}", 
+                "monto_real_invertido": "${:,.0f}", 
+                "brecha_perdida": "${:,.0f}"
+            }), use_container_width=True)
+            
     with st.expander("📖 Metodología de Análisis: La Brecha de Ejecución"):
         st.markdown("""
         * **Método de Visualización:** Diagrama de flujo de Sankey para mapear asimetrías de transferencia.
