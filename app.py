@@ -367,7 +367,7 @@ elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
             popup=f"<b>{d['hitos']}</b><br>Cota: {d['cota']} msnm"
         ).add_to(m)
 
-        # 2. Inyectar el GeoJSON
+    # 2. Inyectar el GeoJSON
     ruta_geojson = 'data/PrediosEjecutados.geojson'
     try:
         folium.GeoJson(
