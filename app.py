@@ -86,12 +86,28 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 2. Barra Lateral
+# 2. Barra Lateral (Aquí "nace" la variable region)
 # -----------------------------------------------------------------------------
+with st.sidebar:
+    st.image("https://via.placeholder.com/300x100.png?text=Logo+Proyecto", use_container_width=True)
+    st.title("Navegación")
+    
+    modulo_seleccionado = st.radio(
+        "Ir a:",
+        ["📊 1. El Panorama Nacional vs. Regional", "📉 2. El Embudo de la Verdad (Flujo)", "🗺️ 3. Visor Geoespacial de Impacto", "⚙️ 4. Simulador: Fondo Común"]
+    )
+    
+    st.markdown("---")
+    st.subheader("Filtros Globales")
+    # AQUI ESTA LA VARIABLE QUE EL SISTEMA NO ENCUENTRA:
+    region = st.selectbox("Región de Análisis", ["Toda Colombia", "Antioquia", "Valle de Aburrá"], index=2)
+    anio_fiscal = st.slider("Vigencia Fiscal", 2020, 2026, (2024, 2026))
+
+    # [Cualquier otro código de la barra lateral...]
+
 # -----------------------------------------------------------------------------
 # Motor de Filtrado Dinámico (Pandas Pipeline)
 # -----------------------------------------------------------------------------
-# Lógica de anidamiento territorial
 if region == "Valle de Aburrá":
     filtro_regiones = ['Valle de Aburrá']
 elif region == "Antioquia":
@@ -106,9 +122,9 @@ df_ejecucion = df_ejecucion_base[df_ejecucion_base['region'].isin(filtro_regione
 df_flujo = pd.merge(df_origenes, df_ejecucion, on='id_fuente', how='left').fillna(0)
 df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
 
+
 # -----------------------------------------------------------------------------
 # 3. Módulos
-# -----------------------------------------------------------------------------
 
 if modulo_seleccionado == "📊 1. El Panorama Nacional vs. Regional":
     st.title("Panorama de Recursos Ambientales e Hídricos")
