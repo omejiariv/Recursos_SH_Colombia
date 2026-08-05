@@ -3,10 +3,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
+import random
 
-# -----------------------------------------------------------------------------
-# 0. Carga y Procesamiento de Datos (Caché para optimizar rendimiento)
-# -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # 0. Carga y Procesamiento de Datos Base
 # -----------------------------------------------------------------------------
@@ -71,7 +69,7 @@ def cargar_datos():
     # Único return válido para cerrar la función
     return df_normatividad, df_origenes, df_ejecucion, df_impacto
 
-df_normatividad, df_origenes, df_ejecucion_base, df_impacto = cargar_datos()
+df_normatividad, df_origenes, df_ejecucion_base, df_impacto_base, df_ic = cargar_datos()
 
 # -----------------------------------------------------------------------------
 # 1. Configuración de la Página y Estética General
@@ -94,16 +92,19 @@ with st.sidebar:
     
     modulo_seleccionado = st.radio(
         "Ir a:",
-        ["📊 1. El Panorama Nacional vs. Regional", "📉 2. El Embudo de la Verdad (Flujo)", "🗺️ 3. Visor Geoespacial de Impacto", "⚙️ 4. Simulador: Fondo Común"]
+        [
+            "📊 1. El Panorama Nacional vs. Regional", 
+            "📉 2. El Embudo de la Verdad (Flujo)", 
+            "🗺️ 3. Visor Geoespacial de Impacto", 
+            "⚙️ 4. Simulador: Fondo Común",
+            "💰 5. Potencial del 1% (Art. 111)" # NUEVO MÓDULO
+        ]
     )
     
     st.markdown("---")
     st.subheader("Filtros Globales")
-    # AQUI ESTA LA VARIABLE QUE EL SISTEMA NO ENCUENTRA:
     region = st.selectbox("Región de Análisis", ["Toda Colombia", "Antioquia", "Valle de Aburrá"], index=2)
     anio_fiscal = st.slider("Vigencia Fiscal", 2020, 2026, (2024, 2026))
-
-    # [Cualquier otro código de la barra lateral...]
 
 # -----------------------------------------------------------------------------
 # Motor de Filtrado Dinámico (Pandas Pipeline)
@@ -354,3 +355,59 @@ elif modulo_seleccionado == "⚙️ 4. Simulador: Fondo Común":
         * **Fórmula de Eficiencia:** $Eficiencia = (Ejecucion_{Base} / Recaudo) + (\% Fondo * \alpha_{Centralizacion})$. El coeficiente $\alpha$ representa el ahorro en economía de escala.
         * **Referentes:** Esquemas de fondos de agua latinoamericanos y lineamientos de Soluciones Basadas en la Naturaleza (SbN) de la UICN.
         """)
+
+# --- MÓDULO 5: POTENCIAL DEL 1% (INGRESOS CORRIENTES) ---
+elif modulo_seleccionado == "💰 5. Potencial del 1% (Art. 111)":
+    st.title("El Gigante Dormido: 1% de Ingresos Corrientes")
+    st.write("""
+    Según el Artículo 111 de la Ley 99 de 1993, los departamentos y municipios deben dedicar **mínimo el 1% de sus ingresos corrientes** 
+    a la adquisición y mantenimiento de áreas de importancia estratégica para la conservación de recursos hídricos.
+    """)
+    
+    # Selector de departamento (Independiente del filtro global)
+    depto_seleccionado = st.selectbox("Seleccione el Departamento para el análisis del 1%:", df_ic['Departamento'].unique())
+    
+    # Filtrar datos
+    df_filtro_ic = df_ic[df_ic['Departamento'] == depto_seleccionado]
+    
+    # KPI Resumen
+    total_recaudo_potencial = df_filtro_ic['Minimo_1_Porciento'].sum()
+    st.metric(label=f"Potencial Total de Inversión (2020-2026) - {depto_seleccionado}", value=f"${total_recaudo_potencial:,.0f} COP")
+    
+    # Gráfica Plotly
+    fig_ic = go.Figure()
+    # Barra de Ingresos Corrientes (Base)
+    fig_ic.add_trace(go.Bar(
+        x=df_filtro_ic['Año'], 
+        y=df_filtro_ic['Ingresos_Corrientes'],
+        name='Ingresos Corrientes',
+        marker_color='#bdc3c7'
+    ))
+    # Barra del 1% Mandatorio
+    fig_ic.add_trace(go.Bar(
+        x=df_filtro_ic['Año'], 
+        y=df_filtro_ic['Minimo_1_Porciento'],
+        name='1% Mandatorio (Agua)',
+        marker_color='#3498db'
+    ))
+    
+    fig_ic.update_layout(
+        title=f"Evolución de Ingresos y Obligación Ambiental (COP) - {depto_seleccionado}",
+        barmode='overlay',
+        yaxis_type="log", # Usamos escala logarítmica porque la diferencia entre el 100% y el 1% es enorme visualmente
+        height=500
+    )
+    
+    st.plotly_chart(fig_ic, use_container_width=True)
+    
+    st.markdown("### Datos Detallados")
+    st.dataframe(df_filtro_ic.style.format({"Ingresos_Corrientes": "${:,.0f}", "Minimo_1_Porciento": "${:,.0f}"}), use_container_width=True)
+    
+    # Botón de Descarga CSV
+    csv_ic = df_filtro_ic.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Descargar Datos (CSV)",
+        data=csv_ic,
+        file_name=f"Ingresos_Corrientes_1Porciento_{depto_seleccionado}.csv",
+        mime="text/csv",
+    )
