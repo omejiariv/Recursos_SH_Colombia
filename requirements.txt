@@ -7,4 +7,3 @@ plotly
 pydeck
 folium
 streamlit-folium
-random
