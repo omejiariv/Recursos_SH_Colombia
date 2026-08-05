@@ -107,51 +107,57 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("Filtros Globales")
     
-    region = st.selectbox("Región / Departamento", ["Toda Colombia", "Antioquia", "Cundinamarca", "Valle de Aburrá"], index=1)
+    # El archivo TerriData contiene datos agregados para Colombia y desagregados para Antioquia
+    region = st.selectbox("Región / Departamento", ["Toda Colombia", "Antioquia"], index=1)
     
-    # Lógica condicional para el selector de municipios
-    municipio_seleccionado = "Todos"
+    # Selector dinámico de municipio (Solo se activa si estamos en Antioquia)
     if region == "Antioquia":
-        municipio_seleccionado = st.selectbox("Municipio Específico", ["Todos", "Medellín", "Guarne", "Rionegro", "El Retiro"])
-    elif region == "Cundinamarca":
-        municipio_seleccionado = st.selectbox("Municipio Específico", ["Todos", "Bogotá", "Chía", "Cajicá"])
+        # Extraemos los municipios reales del DataFrame (excluyendo el agregado departamental 'Antioquia')
+        municipios_reales = df_ic_base[(df_ic_base['Departamento'] == 'Antioquia') & (df_ic_base['Municipio'] != 'Antioquia')]['Municipio'].unique().tolist()
+        municipios_reales.sort() # Orden alfabético para mejor experiencia de usuario
+        municipios_reales.insert(0, "Todos") # Opción por defecto
         
-    anio_fiscal = st.slider("Vigencia Fiscal", 2020, 2026, (2024, 2026))
+        municipio_seleccionado = st.selectbox("Municipio Específico", municipios_reales)
+    else:
+        municipio_seleccionado = "Todos"
+        
+    # El rango temporal se ajusta a la realidad del archivo del DNP
+    anio_fiscal = st.slider("Vigencia Fiscal (TerriData)", 2000, 2024, (2020, 2024))
 
 # -----------------------------------------------------------------------------
 # Motor de Filtrado Dinámico (Pandas Pipeline)
 # -----------------------------------------------------------------------------
-anio_inicio, anio_fin = anio_fiscal # Desempacamos el slider de la barra lateral
+anio_inicio, anio_fin = anio_fiscal # Desempacamos los años reales
 
-# 1. Lógica de anidamiento territorial
-if region == "Valle de Aburrá":
-    filtro_regiones = ['Valle de Aburrá']
-elif region == "Antioquia":
-    filtro_regiones = ['Valle de Aburrá', 'Antioquia']
-elif region == "Cundinamarca":
-    filtro_regiones = ['Cundinamarca']
-else:
-    filtro_regiones = df_ejecucion_base['region'].unique() # Toda Colombia
-
-# 2. Aplicar el filtro ESPACIAL y TEMPORAL a la tabla de ejecución
-df_ejecucion = df_ejecucion_base[
-    (df_ejecucion_base['region'].isin(filtro_regiones)) & 
-    (df_ejecucion_base['vigencia'] >= anio_inicio) & 
-    (df_ejecucion_base['vigencia'] <= anio_fin)
-]
-
-# 3. Filtrar tabla de impactos
-df_impacto = df_impacto_base[df_impacto_base['id_proyecto'].isin(df_ejecucion['id_proyecto'])]
-
-# 4. Filtrar tabla de Ingresos Corrientes (Módulo 5) por AÑO
+# 1. Filtro Temporal ESTRICTO para la tabla oficial de Ingresos Corrientes (Módulo 5)
 df_ic = df_ic_base[
     (df_ic_base['Año'] >= anio_inicio) & 
     (df_ic_base['Año'] <= anio_fin)
 ]
 
-# 5. Recalcular el flujo financiero principal
+# 2. Lógica Territorial de Transición (Para proteger los Módulos 1 al 4)
+if region == "Toda Colombia":
+    filtro_regiones = df_ejecucion_base['region'].unique()
+elif region == "Antioquia":
+    if municipio_seleccionado == "Todos":
+        # Mantenemos las regiones simuladas temporalmente para no romper la vista
+        filtro_regiones = ['Antioquia', 'Valle de Aburrá'] 
+    else:
+        # Aquí en el futuro enlazaremos la ejecución específica por municipio
+        filtro_regiones = [municipio_seleccionado] 
+
+# Aplicamos filtro a la ejecución (si el municipio no tiene obras simuladas, no se rompe, solo queda en blanco)
+df_ejecucion = df_ejecucion_base[df_ejecucion_base['region'].isin(filtro_regiones)]
+
+# 3. Recálculo del Flujo Financiero Principal
 df_flujo = pd.merge(df_origenes, df_ejecucion, on='id_fuente', how='inner')
-df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
+if not df_flujo.empty:
+    df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
+else:
+    df_flujo['brecha_perdida'] = 0
+
+# 4. Filtrar tabla de impactos territoriales
+df_impacto = df_impacto_base[df_impacto_base['id_proyecto'].isin(df_ejecucion['id_proyecto'])]
 
 # -----------------------------------------------------------------------------
 # 3. Módulos
