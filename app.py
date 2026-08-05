@@ -108,6 +108,7 @@ with st.sidebar:
 # -----------------------------------------------------------------------------
 # Motor de Filtrado Dinámico (Pandas Pipeline)
 # -----------------------------------------------------------------------------
+# 1. Lógica de anidamiento territorial
 if region == "Valle de Aburrá":
     filtro_regiones = ['Valle de Aburrá']
 elif region == "Antioquia":
@@ -115,13 +116,16 @@ elif region == "Antioquia":
 else:
     filtro_regiones = df_ejecucion_base['region'].unique() # Toda Colombia
 
-# Aplicar el filtro a la tabla de ejecución
+# 2. Aplicar el filtro a la tabla de ejecución
 df_ejecucion = df_ejecucion_base[df_ejecucion_base['region'].isin(filtro_regiones)]
 
-# Recalcular el flujo financiero uniendo orígenes con la ejecución ya filtrada
-df_flujo = pd.merge(df_origenes, df_ejecucion, on='id_fuente', how='left').fillna(0)
-df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
+# 3. Filtrar también la tabla de impactos para el Simulador (Módulo 4)
+df_impacto = df_impacto_base[df_impacto_base['id_proyecto'].isin(df_ejecucion['id_proyecto'])]
 
+# 4. Recalcular el flujo financiero (Cambiamos 'left' por 'inner')
+# Así solo sumamos el recaudo de las fuentes que operan en la región seleccionada
+df_flujo = pd.merge(df_origenes, df_ejecucion, on='id_fuente', how='inner')
+df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
 
 # -----------------------------------------------------------------------------
 # 3. Módulos
