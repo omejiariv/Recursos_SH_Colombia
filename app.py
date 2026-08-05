@@ -45,12 +45,16 @@ def cargar_datos():
         st.error(f"Error en el ETL: No se pudo procesar el archivo TerriData. Revisa los logs. Error: {e}")
         df_ic = pd.DataFrame(columns=['Departamento', 'Municipio', 'Año', 'Ingresos_Corrientes', 'Minimo_1_Porciento'])
 
-    # 3. Bases Temporales de Ejecución (Datos mínimos estandarizados para no romper los Módulos 1 al 4)
+    # 3. Bases Temporales de Ejecución (Para no romper Módulos 1-4 mientras se hace el nuevo Excel)
     df_origenes = pd.DataFrame({
         'id_fuente': ['F001', 'F002', 'F003'],
         'tipo_recurso': ['Ley (Inversión 1%)', 'Ley (Transferencias)', 'Voluntario (Fondo)'],
         'entidad_recaudadora': ['Municipios/Gobernaciones', 'Sector Eléctrico', 'Fondo de Agua'],
-        'monto_recaudado': [1340000000000, 850000000000, 150000000000] 
+
+        # F001 se reescribe dinámicamente con TerriData, no importa el número acá.
+        # F002 (Eléctrico) sube a 4.5 Billones base Colombia
+        # F003 (Voluntario) sube a 750 Mil Millones base Colombia
+        'monto_recaudado': [0, 4500000000000, 750000000000] 
     })
     
     df_ejecucion = pd.DataFrame({
@@ -90,8 +94,14 @@ st.markdown("""
 # 2. Barra Lateral (Aquí "nace" la variable region)
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.image("https://via.placeholder.com/300x100.png?text=Logo+Proyecto", use_container_width=True)
-    st.title("Navegación")
+    # Cargar el Logo Institucional
+    try:
+        st.image('data/CuencaVerdeLogo_V1.JPG', use_container_width=True)
+    except:
+        st.caption("Fondo de Agua CuencaVerde") # Texto de respaldo por si falla la imagen
+        
+    st.markdown("---")
+    st.subheader("Navegación")
     
     modulo_seleccionado = st.radio(
         "Ir a:",
