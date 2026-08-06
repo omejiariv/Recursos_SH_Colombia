@@ -16,15 +16,20 @@ def cargar_datos():
         'Tipo': ['Ley (Mandatorio)', 'Ejecución Histórica/Proyectada']
     })
 
-    # Función interna de limpieza de moneda
-    def limpiar_moneda(valor):
+    # Funciones de limpieza separadas por la escala real de cada hoja
+    def limpiar_moneda_millones(valor):
         if pd.isna(valor): return 0
-        if isinstance(valor, str):
-            valor = valor.replace('.', '').replace(',', '.')
-        return float(valor) * 1_000_000
+        if isinstance(valor, str): valor = valor.replace('.', '').replace(',', '.')
+        return float(valor) * 1_000_000 # Hoja 1 viene en millones
+
+    def limpiar_moneda_pesos(valor):
+        if pd.isna(valor): return 0
+        if isinstance(valor, str): valor = valor.replace('.', '').replace(',', '.')
+        return float(valor) # Hoja 2 viene en pesos completos
 
     # Algoritmo de Interpolación y Proyección Lineal
     def proyectar_serie(df_historico, anio_inicio, anio_fin):
+        # ... (Mantén tu función proyectar_serie intacta aquí) ...
         datos_proyectados = []
         municipios = df_historico['Entidad'].unique()
         rango_anios = list(range(anio_inicio, anio_fin + 1))
@@ -33,49 +38,36 @@ def cargar_datos():
             df_mpio = df_historico[df_historico['Entidad'] == mpio].sort_values('Año')
             depto = df_mpio['Departamento'].iloc[0] if not df_mpio.empty else 'Antioquia'
             
-            # Extraer X (Años) y Y (Valores) históricos válidos
             x_hist = df_mpio['Año'].values
             y_hist = df_mpio['Valor_COP'].values
             
-            # Si hay suficientes datos, calculamos la regresión lineal (grado 1)
             if len(x_hist) > 1:
                 coeficientes = np.polyfit(x_hist, y_hist, 1)
                 modelo = np.poly1d(coeficientes)
             else:
-                # Si no hay datos, el modelo retorna 0
                 modelo = lambda x: 0
                 
             for anio in rango_anios:
-                # Si el año existe en el histórico, conservamos el dato real
                 if anio in x_hist:
                     valor = y_hist[np.where(x_hist == anio)[0][0]]
                 else:
-                    # Si es un año vacío o futuro, el modelo predice el valor
                     valor = modelo(anio)
-                
-                # Evitar proyecciones financieras negativas
                 valor = max(0, valor)
                 
                 datos_proyectados.append({
-                    'Departamento': depto,
-                    'Municipio': mpio,
-                    'Año': anio,
-                    'Valor_COP': valor
+                    'Departamento': depto, 'Municipio': mpio, 'Año': anio, 'Valor_COP': valor
                 })
-                
         return pd.DataFrame(datos_proyectados)
 
     try:
-        # 2. Ingesta del Archivo Oficial DNP (TerriData)
         archivo_terridata = 'data/TerriData_Dim7_Finanzas.xlsx'
         xls = pd.ExcelFile(archivo_terridata)
         
         # --- PROCESAMIENTO HOJA 1 (Ingresos Corrientes) ---
         df_h1 = pd.read_excel(xls, sheet_name='Hoja1')
         df_ic_raw = df_h1[df_h1['Indicador'] == 'Ingresos corrientes'].copy()
-        df_ic_raw['Valor_COP'] = df_ic_raw['Dato Numérico'].apply(limpiar_moneda)
+        df_ic_raw['Valor_COP'] = df_ic_raw['Dato Numérico'].apply(limpiar_moneda_millones)
         
-        # Proyectar Ingresos Corrientes del 2000 al 2030
         df_ic = proyectar_serie(df_ic_raw, 2000, 2030)
         df_ic = df_ic.rename(columns={'Valor_COP': 'Ingresos_Corrientes'})
         df_ic['Minimo_1_Porciento'] = df_ic['Ingresos_Corrientes'] * 0.01
@@ -83,9 +75,8 @@ def cargar_datos():
         # --- PROCESAMIENTO HOJA 2 (Inversión Ambiental) ---
         df_h2 = pd.read_excel(xls, sheet_name='Hoja2')
         df_inv_raw = df_h2[df_h2['Indicador'] == 'Inversión - Ambiental'].copy()
-        df_inv_raw['Valor_COP'] = df_inv_raw['Dato Numérico'].apply(limpiar_moneda)
+        df_inv_raw['Valor_COP'] = df_inv_raw['Dato Numérico'].apply(limpiar_moneda_pesos)
         
-        # Proyectar Inversión Ambiental del 2000 al 2030 (Rellenando 2019 y 2021-2030)
         df_inv = proyectar_serie(df_inv_raw, 2000, 2030)
         df_inv = df_inv.rename(columns={'Valor_COP': 'Inversion_Ambiental_Ejecutada'})
 
@@ -94,6 +85,7 @@ def cargar_datos():
 
     except Exception as e:
         st.error(f"Error crítico en el ETL Predictivo: {e}")
+        # DataFrame de respaldo en caso de fallo para no romper la app
         df_maestro = pd.DataFrame(columns=['Departamento', 'Municipio', 'Año', 'Ingresos_Corrientes', 'Minimo_1_Porciento', 'Inversion_Ambiental_Ejecutada'])
 
     return df_normatividad, df_maestro
@@ -384,17 +376,17 @@ elif modulo_seleccionado == "💰 5. Potencial del 1% (Art. 111)":
         fig_ic.add_trace(go.Bar(x=df_agrupado['Municipio'], y=df_agrupado['Minimo_1_Porciento'], name='Potencial 1% (Mandatorio)', marker_color='#3498db'))
         fig_ic.add_trace(go.Bar(x=df_agrupado['Municipio'], y=df_agrupado['Inversion_Ambiental_Ejecutada'], name='Inversión Ejecutada Oficial', marker_color='#2ecc71'))
         
-        # Usamos barmode='group' para poner las barras una al lado de la otra
         fig_ic.update_layout(title=f"Brecha Municipal en {ruta_seleccion}", barmode='group', yaxis_type="log", height=600, xaxis_tickangle=-45)
         st.plotly_chart(fig_ic, use_container_width=True)
         
         st.dataframe(df_agrupado.style.format({"Ingresos_Corrientes": "${:,.0f}", "Minimo_1_Porciento": "${:,.0f}", "Inversion_Ambiental_Ejecutada": "${:,.0f}"}), use_container_width=True)
         
-    # Botón de Descarga CSV
-    csv_ic = df_agrupado.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Descargar Matriz Oficial (CSV)",
-        data=csv_ic,
-        file_name=f"Ingresos_Corrientes_TerriData_{region}_{anio_inicio}_{anio_fin}.csv",
-        mime="text/csv",
-    )
+        # EL ARREGLO: El CSV ahora solo se genera si estamos viendo Antioquia (donde df_agrupado existe)
+        csv_ic = df_agrupado.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Descargar Matriz Oficial (CSV)",
+            data=csv_ic,
+            file_name=f"Ingresos_vs_Inversion_TerriData_{region}.csv",
+            mime="text/csv",
+        )
+        
