@@ -146,7 +146,7 @@ with st.sidebar:
     anio_fiscal = st.slider("Vigencia Fiscal (TerriData + Proyecciones)", 2000, 2030, (2020, 2026))
 
 # -----------------------------------------------------------------------------
-# Motor de Filtrado Dinámico (El Nuevo Cerebro)
+# Motor de Filtrado Dinámico (El Nuevo Cerebro Híbrido)
 # -----------------------------------------------------------------------------
 anio_inicio, anio_fin = anio_fiscal 
 
@@ -157,6 +157,7 @@ df_temp = df_maestro_base[(df_maestro_base['Año'] >= anio_inicio) & (df_maestro
 if region == "Toda Colombia":
     df_espacial = df_temp[df_temp['Departamento'] == 'Colombia']
     ruta_seleccion = "Toda Colombia"
+    factor_escala = 1.0 # 100% de los recursos nacionales
 else:
     df_espacial = df_temp[(df_temp['Departamento'] == 'Antioquia') & (df_temp['Municipio'] != 'Antioquia')]
     if municipio_seleccionado != "Todos":
@@ -164,12 +165,43 @@ else:
         ruta_seleccion = f"{municipio_seleccionado} - Antioquia"
     else:
         ruta_seleccion = "Antioquia"
+    
+    # Regla de tres matemática para calcular qué porcentaje del país representa el territorio seleccionado
+    total_col_base = df_maestro_base[(df_maestro_base['Departamento'] == 'Colombia') & (df_maestro_base['Año'] == 2024)]['Minimo_1_Porciento'].sum()
+    total_sel_base = df_espacial[df_espacial['Año'] == 2024]['Minimo_1_Porciento'].sum()
+    factor_escala = total_sel_base / total_col_base if total_col_base > 0 else 0.05
 
-# 3. Cálculo de KPIs Globales Reales (Sin simulaciones)
+# 3. Construcción del Flujo (Reintegrando el ecosistema completo)
 recaudo_1_pct = df_espacial['Minimo_1_Porciento'].sum()
-inversion_ambiental = df_espacial['Inversion_Ambiental_Ejecutada'].sum()
-brecha_total = max(0, recaudo_1_pct - inversion_ambiental)
-eficiencia = (inversion_ambiental / recaudo_1_pct) * 100 if recaudo_1_pct > 0 else 0
+inversion_oficial = df_espacial['Inversion_Ambiental_Ejecutada'].sum()
+
+# Bases escaladas de otras fuentes (Esperando Excel definitivo)
+recaudo_electrico = 850000000000 * factor_escala
+recaudo_voluntario = 150000000000 * factor_escala
+
+# Topamos la ejecución oficial al 1% para poder calcular una brecha realista en ese rubro
+ejecucion_1_pct = min(recaudo_1_pct, inversion_oficial) 
+brecha_1_pct = recaudo_1_pct - ejecucion_1_pct
+
+ejecucion_electrico = recaudo_electrico * 0.45 # Eficiencia simulada del 45%
+brecha_electrico = recaudo_electrico - ejecucion_electrico
+
+ejecucion_voluntario = recaudo_voluntario * 0.90 # Eficiencia simulada del 90%
+brecha_voluntario = recaudo_voluntario - ejecucion_voluntario
+
+# ESTA TABLA SOLUCIONA EL ERROR DEL SIMULADOR (Módulo 4)
+df_flujo = pd.DataFrame({
+    'tipo_recurso': ['Ley 99 (1% ICLD)', 'Ley (Transferencias)', 'Voluntario (Fondo)'],
+    'monto_recaudado': [recaudo_1_pct, recaudo_electrico, recaudo_voluntario],
+    'entidad_ejecutora': ['Inversión Ambiental Oficial', 'Operador Hídrico', 'ONG Territorial'],
+    'monto_real_invertido': [ejecucion_1_pct, ejecucion_electrico, ejecucion_voluntario],
+    'brecha_perdida': [brecha_1_pct, brecha_electrico, brecha_voluntario]
+})
+
+total_recaudado = df_flujo['monto_recaudado'].sum()
+total_ejecutado = df_flujo['monto_real_invertido'].sum()
+brecha_total = df_flujo['brecha_perdida'].sum()
+eficiencia = (total_ejecutado / total_recaudado) * 100 if total_recaudado > 0 else 0
 
 # -----------------------------------------------------------------------------
 # 3. Módulos
@@ -179,47 +211,77 @@ if modulo_seleccionado == "📊 1. El Panorama Nacional vs. Regional":
     st.title("Panorama de Recursos Ambientales e Hídricos")
     st.info(f"📍 **Área de análisis actual:** `{ruta_seleccion}` | 📅 **Vigencia Fiscal:** `{anio_inicio} - {anio_fin}`")
     
-    st.markdown("### Resumen Macro (Basado 100% en DNP e Interpolación)")
+    st.markdown("### Resumen Macro")
     col1, col2, col3 = st.columns(3)
-    col1.metric("Potencial Ley 99 (1% IC)", f"${recaudo_1_pct:,.0f}")
-    col2.metric("Inversión Ambiental Ejecutada", f"${inversion_ambiental:,.0f}", delta=f"-${brecha_total:,.0f} (Brecha)", delta_color="inverse")
+    col1.metric("Total Capital Movilizado", f"${total_recaudado:,.0f}")
+    col2.metric("Inversión Real Ejecutada", f"${total_ejecutado:,.0f}", delta=f"-${brecha_total:,.0f} (Brecha/Fricción)", delta_color="inverse")
     col3.metric("Eficiencia del Sistema", f"{eficiencia:.1f}%")
     
     st.markdown("---")
     st.markdown("### Composición de la Inversión Territorial")
     
-    import plotly.graph_objects as go
-    fig_dona = go.Figure(data=[go.Pie(
-        labels=['Inversión Ambiental Realizada', 'Brecha (Dinero Retenido/Desviado)'], 
-        values=[inversion_ambiental, brecha_total],
-        hole=.5,
-        marker_colors=['#2ecc71', '#e74c3c']
-    )])
-    fig_dona.update_layout(height=350, margin=dict(t=10, b=10, l=10, r=10))
-    st.plotly_chart(fig_dona, use_container_width=True)
-    st.caption("🔍 **Fuente:** Datos y proyecciones basadas exclusivamente en TerriData (DNP). Ya no se incluyen simulaciones.")
+    col_izq, col_der = st.columns([1, 1])
+    with col_izq:
+        recursos_ley = df_flujo[df_flujo['tipo_recurso'].str.contains("Ley")]['monto_recaudado'].sum()
+        recursos_vol = df_flujo[df_flujo['tipo_recurso'].str.contains("Voluntario")]['monto_recaudado'].sum()
+        st.metric("🏛️ Recursos de Ley (Mandatorios)", f"${recursos_ley:,.0f}")
+        st.metric("🤝 Recursos Voluntarios (Privados/Fondos)", f"${recursos_vol:,.0f}")
+        
+        with st.expander("📖 Soporte Jurídico y Clasificación de Recursos"):
+            st.dataframe(df_normatividad, use_container_width=True)
+            
+    with col_der:
+        import plotly.graph_objects as go
+        fig_dona = go.Figure(data=[go.Pie(
+            labels=df_flujo['tipo_recurso'], 
+            values=df_flujo['monto_recaudado'],
+            hole=.5,
+            marker_colors=['#3498db', '#2ecc71', '#f1c40f']
+        )])
+        fig_dona.update_layout(height=300, margin=dict(t=10, b=10, l=10, r=10), showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5))
+        st.plotly_chart(fig_dona, use_container_width=True)
+        
+    st.caption("🔍 **Fuente:** 1% ICLD e Inversión Oficial basados 100% en DNP (TerriData). Otras fuentes utilizan estimaciones estructurales escaladas temporalmente al territorio.")
 
 # --- MÓDULO 2: EL EMBUDO DE LA VERDAD (FLUJO) ---
 elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
     st.title("El Embudo de la Verdad")
     st.info(f"📍 **Área de análisis:** `{ruta_seleccion}` | 📅 **Vigencia Fiscal:** `{anio_inicio} - {anio_fin}`")
 
-    if recaudo_1_pct == 0:
+    if df_flujo['monto_recaudado'].sum() == 0:
         st.warning("No hay recursos para esta selección.")
     else:
         import plotly.graph_objects as go
-        nodos = ["Ley 99 (1% ICLD)", "Inversión Ambiental Oficial", "Brecha / Retención"]
-        colores = ["rgba(52, 152, 219, 0.8)", "rgba(46, 204, 113, 0.8)", "rgba(231, 76, 60, 0.8)"]
         
-        # Flujo: Del 1% sale hacia la inversión o se va a la brecha
-        source = [0, 0]
-        target = [1, 2]
-        value = [inversion_ambiental, brecha_total]
+        fuentes = df_flujo['tipo_recurso'].tolist()
+        ejecutores = df_flujo['entidad_ejecutora'].tolist()
+        nodo_brecha = "Brecha / Retención (Sin Ejecutar)"
+        
+        nodos = fuentes + ejecutores + [nodo_brecha]
+        nodo_indices = {nodo: i for i, nodo in enumerate(nodos)}
+        
+        source, target, value = [], [], []
+        
+        for index, row in df_flujo.iterrows():
+            fuente_idx = nodo_indices[row['tipo_recurso']]
+            
+            if row['monto_real_invertido'] > 0:
+                ejecutor_idx = nodo_indices[row['entidad_ejecutora']]
+                source.append(fuente_idx)
+                target.append(ejecutor_idx)
+                value.append(row['monto_real_invertido'])
+                
+            if row['brecha_perdida'] > 0:
+                brecha_idx = nodo_indices[nodo_brecha]
+                source.append(fuente_idx)
+                target.append(brecha_idx)
+                value.append(row['brecha_perdida'])
+
+        colores_nodos = ["rgba(231, 76, 60, 0.8)" if n == nodo_brecha else "rgba(46, 204, 113, 0.8)" if n in ejecutores else "rgba(52, 152, 219, 0.8)" for n in nodos]
 
         fig_sankey = go.Figure(data=[go.Sankey(
-            valueformat = ",.0f",
-            valuesuffix = " COP",
-            node = dict(pad=20, thickness=25, line=dict(color="black", width=0.5), label=nodos, color=colores),
+            valueformat = ",.0f", valuesuffix = " COP",
+            node = dict(pad=20, thickness=25, line=dict(color="black", width=0.5), label=nodos, color=colores_nodos),
             link = dict(source=source, target=target, value=value, color="rgba(189, 195, 199, 0.4)"),
             textfont=dict(color="black", size=14, family="Arial")
         )])
@@ -372,11 +434,21 @@ elif modulo_seleccionado == "💰 5. Potencial del 1% (Art. 111)":
         df_agrupado = df_espacial.groupby('Municipio')[['Ingresos_Corrientes', 'Minimo_1_Porciento', 'Inversion_Ambiental_Ejecutada']].sum().reset_index()
         df_agrupado = df_agrupado.sort_values(by='Ingresos_Corrientes', ascending=False)
         
+        # --- EL NUEVO BOTÓN SELECTOR DE ESCALA ---
+        st.markdown("### Configuración Visual")
+        escala_seleccionada = st.radio(
+            "Tipo de Escala en el Gráfico:", 
+            ["Logarítmica (Permite visibilizar municipios pequeños)", "Lineal (Muestra la proporción económica real)"], 
+            horizontal=True
+        )
+        tipo_escala = "log" if "Logarítmica" in escala_seleccionada else "linear"
+        
         fig_ic = go.Figure()
         fig_ic.add_trace(go.Bar(x=df_agrupado['Municipio'], y=df_agrupado['Minimo_1_Porciento'], name='Potencial 1% (Mandatorio)', marker_color='#3498db'))
         fig_ic.add_trace(go.Bar(x=df_agrupado['Municipio'], y=df_agrupado['Inversion_Ambiental_Ejecutada'], name='Inversión Ejecutada Oficial', marker_color='#2ecc71'))
         
-        fig_ic.update_layout(title=f"Brecha Municipal en {ruta_seleccion}", barmode='group', yaxis_type="log", height=600, xaxis_tickangle=-45)
+        # Le pasamos la variable tipo_escala al layout
+        fig_ic.update_layout(title=f"Brecha Municipal en {ruta_seleccion}", barmode='group', yaxis_type=tipo_escala, height=600, xaxis_tickangle=-45)
         st.plotly_chart(fig_ic, use_container_width=True)
         
         st.dataframe(df_agrupado.style.format({"Ingresos_Corrientes": "${:,.0f}", "Minimo_1_Porciento": "${:,.0f}", "Inversion_Ambiental_Ejecutada": "${:,.0f}"}), use_container_width=True)
