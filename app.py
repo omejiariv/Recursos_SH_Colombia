@@ -6,30 +6,29 @@ from streamlit_folium import st_folium
 import numpy as np
 
 # -----------------------------------------------------------------------------
-# 0. Carga y Procesamiento Predictivo (ETL + Proyecciones al 2030)
+# 0. Carga y Procesamiento Predictivo (ETL Híbrido: Finanzas + Ambiente)
 # -----------------------------------------------------------------------------
 @st.cache_data
 def cargar_datos():
-    # 1. Catálogo Normativo
+    # Catálogo Normativo Actualizado
     df_normatividad = pd.DataFrame({
-        'Instrumento': ['Art. 111 (Ley 99/93) - 1% ICLD', 'Inversión - Ambiental (DNP)'],
-        'Tipo': ['Ley (Mandatorio)', 'Ejecución Histórica/Proyectada']
+        'Instrumento': ['Art. 111 (Ley 99/93) - 1% ICLD', 'Inversión - Ambiental (DNP)', 'Adquisición Predios/PSA (DNP)'],
+        'Tipo': ['Ley (Mandatorio)', 'Ejecución Histórica/Proyectada', 'Medición Específica Art. 111']
     })
 
-    # Funciones de limpieza separadas por la escala real de cada hoja
+    # Funciones de limpieza de moneda
     def limpiar_moneda_millones(valor):
         if pd.isna(valor): return 0
         if isinstance(valor, str): valor = valor.replace('.', '').replace(',', '.')
-        return float(valor) * 1_000_000 # Hoja 1 viene en millones
+        return float(valor) * 1_000_000
 
     def limpiar_moneda_pesos(valor):
         if pd.isna(valor): return 0
         if isinstance(valor, str): valor = valor.replace('.', '').replace(',', '.')
-        return float(valor) # Hoja 2 viene en pesos completos
+        return float(valor)
 
-    # Algoritmo de Interpolación y Proyección Lineal
+    # Algoritmo de Interpolación y Proyección Lineal (2000 - 2030)
     def proyectar_serie(df_historico, anio_inicio, anio_fin):
-        # ... (Mantén tu función proyectar_serie intacta aquí) ...
         datos_proyectados = []
         municipios = df_historico['Entidad'].unique()
         rango_anios = list(range(anio_inicio, anio_fin + 1))
@@ -52,7 +51,7 @@ def cargar_datos():
                     valor = y_hist[np.where(x_hist == anio)[0][0]]
                 else:
                     valor = modelo(anio)
-                valor = max(0, valor)
+                valor = max(0, valor) # Evitar valores negativos en finanzas
                 
                 datos_proyectados.append({
                     'Departamento': depto, 'Municipio': mpio, 'Año': anio, 'Valor_COP': valor
@@ -60,11 +59,14 @@ def cargar_datos():
         return pd.DataFrame(datos_proyectados)
 
     try:
-        archivo_terridata = 'data/TerriData_Dim7_Finanzas.xlsx'
-        xls = pd.ExcelFile(archivo_terridata)
+        # ---------------------------------------------------------
+        # 1. INGESTA FINANCIERA (Dimensión 7)
+        # ---------------------------------------------------------
+        archivo_terridata_finanzas = 'data/TerriData_Dim7_Finanzas.xlsx'
+        xls_fin = pd.ExcelFile(archivo_terridata_finanzas)
         
-        # --- PROCESAMIENTO HOJA 1 (Ingresos Corrientes) ---
-        df_h1 = pd.read_excel(xls, sheet_name='Hoja1')
+        # Ingresos Corrientes (Base de Cálculo)
+        df_h1 = pd.read_excel(xls_fin, sheet_name='Hoja1')
         df_ic_raw = df_h1[df_h1['Indicador'] == 'Ingresos corrientes'].copy()
         df_ic_raw['Valor_COP'] = df_ic_raw['Dato Numérico'].apply(limpiar_moneda_millones)
         
@@ -72,21 +74,55 @@ def cargar_datos():
         df_ic = df_ic.rename(columns={'Valor_COP': 'Ingresos_Corrientes'})
         df_ic['Minimo_1_Porciento'] = df_ic['Ingresos_Corrientes'] * 0.01
 
-        # --- PROCESAMIENTO HOJA 2 (Inversión Ambiental) ---
-        df_h2 = pd.read_excel(xls, sheet_name='Hoja2')
+        # Inversión Ambiental General
+        df_h2 = pd.read_excel(xls_fin, sheet_name='Hoja2')
         df_inv_raw = df_h2[df_h2['Indicador'] == 'Inversión - Ambiental'].copy()
         df_inv_raw['Valor_COP'] = df_inv_raw['Dato Numérico'].apply(limpiar_moneda_pesos)
         
         df_inv = proyectar_serie(df_inv_raw, 2000, 2030)
         df_inv = df_inv.rename(columns={'Valor_COP': 'Inversion_Ambiental_Ejecutada'})
 
-        # --- UNIFICACIÓN DEL CEREBRO DE DATOS ---
+        # ---------------------------------------------------------
+        # 2. INGESTA AMBIENTAL Y TERRITORIAL (Dimensión 11)
+        # ---------------------------------------------------------
+        archivo_terridata_amb = 'data/TerriData_Dim11_Amb_BDVSEc.xlsx'
+        xls_amb = pd.ExcelFile(archivo_terridata_amb)
+        df_amb = pd.read_excel(xls_amb, sheet_name='Hoja01')
+        
+        # Indicador A: Cumplimiento Específico Art 111 (% de Ingresos)
+        ind_art111 = 'Porcentaje de ingresos corrientes destinados a adquisición de predios o PSA en cuencas abastecedoras de acueducto'
+        df_art111_raw = df_amb[df_amb['Indicador'] == ind_art111].copy()
+        df_art111_raw['Cumplimiento_Art111_Pct'] = pd.to_numeric(df_art111_raw['Dato Numérico'], errors='coerce').fillna(0)
+        df_art111 = df_art111_raw[['Departamento', 'Entidad', 'Año', 'Cumplimiento_Art111_Pct']].rename(columns={'Entidad': 'Municipio'})
+        
+        # Indicador B: Área protegida SINAP (Hectáreas)
+        ind_sinap = 'Área de la entidad territorial que hace parte del SINAP'
+        df_sinap_raw = df_amb[df_amb['Indicador'] == ind_sinap].copy()
+        df_sinap_raw['Area_SINAP_ha'] = pd.to_numeric(df_sinap_raw['Dato Numérico'], errors='coerce').fillna(0)
+        df_sinap = df_sinap_raw[['Departamento', 'Entidad', 'Año', 'Area_SINAP_ha']].rename(columns={'Entidad': 'Municipio'})
+
+        # ---------------------------------------------------------
+        # 3. UNIFICACIÓN DEL CEREBRO DE DATOS (Master Merge)
+        # ---------------------------------------------------------
         df_maestro = pd.merge(df_ic, df_inv, on=['Departamento', 'Municipio', 'Año'], how='left').fillna(0)
+        df_maestro = pd.merge(df_maestro, df_art111, on=['Departamento', 'Municipio', 'Año'], how='left')
+        df_maestro = pd.merge(df_maestro, df_sinap, on=['Departamento', 'Municipio', 'Año'], how='left')
+        
+        # Relleno Inteligente (Forward Fill) para indicadores estructurales
+        df_maestro = df_maestro.sort_values(by=['Municipio', 'Año'])
+        df_maestro['Cumplimiento_Art111_Pct'] = df_maestro.groupby('Municipio')['Cumplimiento_Art111_Pct'].ffill().fillna(0)
+        df_maestro['Area_SINAP_ha'] = df_maestro.groupby('Municipio')['Area_SINAP_ha'].ffill().fillna(0)
+        
+        # 4. CÁLCULO FINANCIERO DEL IMPACTO REAL (DNP)
+        # Convertimos el % histórico a pesos reales ejecutados en adquisición/PSA (La verdadera inversión de la Ley 99)
+        df_maestro['Inversion_Art111_Real'] = df_maestro['Ingresos_Corrientes'] * (df_maestro['Cumplimiento_Art111_Pct'] / 100)
 
     except Exception as e:
-        st.error(f"Error crítico en el ETL Predictivo: {e}")
-        # DataFrame de respaldo en caso de fallo para no romper la app
-        df_maestro = pd.DataFrame(columns=['Departamento', 'Municipio', 'Año', 'Ingresos_Corrientes', 'Minimo_1_Porciento', 'Inversion_Ambiental_Ejecutada'])
+        st.error(f"Error crítico en el ETL Predictivo/Ambiental: {e}")
+        df_maestro = pd.DataFrame(columns=[
+            'Departamento', 'Municipio', 'Año', 'Ingresos_Corrientes', 'Minimo_1_Porciento', 
+            'Inversion_Ambiental_Ejecutada', 'Cumplimiento_Art111_Pct', 'Area_SINAP_ha', 'Inversion_Art111_Real'
+        ])
 
     return df_normatividad, df_maestro
 
