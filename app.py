@@ -154,8 +154,8 @@ with st.sidebar:
     else:
         municipio_seleccionado = "Todos"
         
-    # El rango temporal se ajusta a la realidad del archivo del DNP
-    anio_fiscal = st.slider("Vigencia Fiscal (TerriData)", 2000, 2024, (2020, 2024))
+    # El rango temporal usa la realidad DNP y proyecta hasta la agenda 2030
+    anio_fiscal = st.slider("Vigencia Fiscal (TerriData + Proyecciones)", 2000, 2030, (2020, 2026))
 
 # -----------------------------------------------------------------------------
 # Motor de Filtrado Dinámico (Pandas Pipeline)
