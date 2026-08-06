@@ -3,80 +3,103 @@ import pandas as pd
 import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
-import random
+import numpy as np
 
 # -----------------------------------------------------------------------------
-# 0. Carga y Procesamiento de Datos Base (ETL desde archivo oficial DNP)
+# 0. Carga y Procesamiento Predictivo (ETL + Proyecciones al 2030)
 # -----------------------------------------------------------------------------
 @st.cache_data
 def cargar_datos():
-    # 1. Catálogo Normativo (Mantenemos la base legal intacta)
+    # 1. Catálogo Normativo
     df_normatividad = pd.DataFrame({
-        'Instrumento': ['Art. 111 (Ley 99/93) - 1% ICLD', 'Transferencias Sector Eléctrico', 'Tasa por Uso', 'Tasa Retributiva', 'Inversión Forzosa 1%', 'PSA', 'Recursos ESG'],
-        'Tipo': ['Ley', 'Ley', 'Ley', 'Ley', 'Ley', 'Mixto', 'Voluntario']
+        'Instrumento': ['Art. 111 (Ley 99/93) - 1% ICLD', 'Inversión - Ambiental (DNP)'],
+        'Tipo': ['Ley (Mandatorio)', 'Ejecución Histórica/Proyectada']
     })
 
-    # 2. Ingesta del Archivo Oficial DNP (TerriData)
-    try:
-        # Cargar el archivo directamente desde el repositorio
-        df_terridata = pd.read_excel('data/TerriData_Dim7_Finanzas.xlsx')
+    # Función interna de limpieza de moneda
+    def limpiar_moneda(valor):
+        if pd.isna(valor): return 0
+        if isinstance(valor, str):
+            valor = valor.replace('.', '').replace(',', '.')
+        return float(valor) * 1_000_000
+
+    # Algoritmo de Interpolación y Proyección Lineal
+    def proyectar_serie(df_historico, anio_inicio, anio_fin):
+        datos_proyectados = []
+        municipios = df_historico['Entidad'].unique()
+        rango_anios = list(range(anio_inicio, anio_fin + 1))
         
-        # Filtrar únicamente la variable de interés
-        df_ic_raw = df_terridata[df_terridata['Indicador'] == 'Ingresos corrientes'].copy()
-        
-        # Función de limpieza de moneda (Transformación)
-        def limpiar_moneda(valor):
-            if pd.isna(valor):
-                return 0
-            if isinstance(valor, str):
-                # Limpiar formato europeo (ej. 1.029.659,00)
-                valor = valor.replace('.', '').replace(',', '.')
-            return float(valor) * 1_000_000 # Convertir de millones a COP exactos
+        for mpio in municipios:
+            df_mpio = df_historico[df_historico['Entidad'] == mpio].sort_values('Año')
+            depto = df_mpio['Departamento'].iloc[0] if not df_mpio.empty else 'Antioquia'
             
-        df_ic_raw['Ingresos_Corrientes'] = df_ic_raw['Dato Numérico'].apply(limpiar_moneda)
-        df_ic_raw['Minimo_1_Porciento'] = df_ic_raw['Ingresos_Corrientes'] * 0.01
+            # Extraer X (Años) y Y (Valores) históricos válidos
+            x_hist = df_mpio['Año'].values
+            y_hist = df_mpio['Valor_COP'].values
+            
+            # Si hay suficientes datos, calculamos la regresión lineal (grado 1)
+            if len(x_hist) > 1:
+                coeficientes = np.polyfit(x_hist, y_hist, 1)
+                modelo = np.poly1d(coeficientes)
+            else:
+                # Si no hay datos, el modelo retorna 0
+                modelo = lambda x: 0
+                
+            for anio in rango_anios:
+                # Si el año existe en el histórico, conservamos el dato real
+                if anio in x_hist:
+                    valor = y_hist[np.where(x_hist == anio)[0][0]]
+                else:
+                    # Si es un año vacío o futuro, el modelo predice el valor
+                    valor = modelo(anio)
+                
+                # Evitar proyecciones financieras negativas
+                valor = max(0, valor)
+                
+                datos_proyectados.append({
+                    'Departamento': depto,
+                    'Municipio': mpio,
+                    'Año': anio,
+                    'Valor_COP': valor
+                })
+                
+        return pd.DataFrame(datos_proyectados)
+
+    try:
+        # 2. Ingesta del Archivo Oficial DNP (TerriData)
+        archivo_terridata = 'data/TerriData_Dim7_Finanzas.xlsx'
+        xls = pd.ExcelFile(archivo_terridata)
         
-        # Estandarizar columnas para los Módulos del Tablero
-        df_ic = df_ic_raw[['Departamento', 'Entidad', 'Año', 'Ingresos_Corrientes', 'Minimo_1_Porciento']]
-        df_ic = df_ic.rename(columns={'Entidad': 'Municipio'})
+        # --- PROCESAMIENTO HOJA 1 (Ingresos Corrientes) ---
+        df_h1 = pd.read_excel(xls, sheet_name='Hoja1')
+        df_ic_raw = df_h1[df_h1['Indicador'] == 'Ingresos corrientes'].copy()
+        df_ic_raw['Valor_COP'] = df_ic_raw['Dato Numérico'].apply(limpiar_moneda)
         
+        # Proyectar Ingresos Corrientes del 2000 al 2030
+        df_ic = proyectar_serie(df_ic_raw, 2000, 2030)
+        df_ic = df_ic.rename(columns={'Valor_COP': 'Ingresos_Corrientes'})
+        df_ic['Minimo_1_Porciento'] = df_ic['Ingresos_Corrientes'] * 0.01
+
+        # --- PROCESAMIENTO HOJA 2 (Inversión Ambiental) ---
+        df_h2 = pd.read_excel(xls, sheet_name='Hoja2')
+        df_inv_raw = df_h2[df_h2['Indicador'] == 'Inversión - Ambiental'].copy()
+        df_inv_raw['Valor_COP'] = df_inv_raw['Dato Numérico'].apply(limpiar_moneda)
+        
+        # Proyectar Inversión Ambiental del 2000 al 2030 (Rellenando 2019 y 2021-2030)
+        df_inv = proyectar_serie(df_inv_raw, 2000, 2030)
+        df_inv = df_inv.rename(columns={'Valor_COP': 'Inversion_Ambiental_Ejecutada'})
+
+        # --- UNIFICACIÓN DEL CEREBRO DE DATOS ---
+        df_maestro = pd.merge(df_ic, df_inv, on=['Departamento', 'Municipio', 'Año'], how='left').fillna(0)
+
     except Exception as e:
-        # Mensaje de alerta por si Streamlit Cloud no encuentra el archivo temporalmente
-        st.error(f"Error en el ETL: No se pudo procesar el archivo TerriData. Revisa los logs. Error: {e}")
-        df_ic = pd.DataFrame(columns=['Departamento', 'Municipio', 'Año', 'Ingresos_Corrientes', 'Minimo_1_Porciento'])
+        st.error(f"Error crítico en el ETL Predictivo: {e}")
+        df_maestro = pd.DataFrame(columns=['Departamento', 'Municipio', 'Año', 'Ingresos_Corrientes', 'Minimo_1_Porciento', 'Inversion_Ambiental_Ejecutada'])
 
-    # 3. Bases Temporales de Ejecución (Para no romper Módulos 1-4 mientras se hace el nuevo Excel)
-    df_origenes = pd.DataFrame({
-        'id_fuente': ['F001', 'F002', 'F003'],
-        'tipo_recurso': ['Ley (Inversión 1%)', 'Ley (Transferencias)', 'Voluntario (Fondo)'],
-        'entidad_recaudadora': ['Municipios/Gobernaciones', 'Sector Eléctrico', 'Fondo de Agua'],
+    return df_normatividad, df_maestro
 
-        # F001 se reescribe dinámicamente con TerriData, no importa el número acá.
-        # F002 (Eléctrico) sube a 4.5 Billones base Colombia
-        # F003 (Voluntario) sube a 750 Mil Millones base Colombia
-        'monto_recaudado': [0, 4500000000000, 750000000000] 
-    })
-    
-    df_ejecucion = pd.DataFrame({
-        'id_proyecto': ['P001', 'P002'],
-        'id_fuente': ['F001', 'F002'],
-        'monto_real_invertido': [30000000000, 90000000000],
-        'entidad_ejecutora': ['ONG Territorial', 'Operador Hídrico'],
-        'lat': [6.1158, 6.2917],
-        'lon': [-75.4983, -75.5011],
-        'region': ['Valle de Aburrá', 'Antioquia'],
-        'vigencia': [2024, 2024]
-    })
-    
-    df_impacto = pd.DataFrame({
-        'id_proyecto': ['P001', 'P002'],
-        'ha_restauradas': [120, 350]
-    })
-
-    return df_normatividad, df_origenes, df_ejecucion, df_impacto, df_ic
-
-# Llamado al ETL y despliegue de los 5 dataframes
-df_normatividad, df_origenes, df_ejecucion_base, df_impacto_base, df_ic_base = cargar_datos()
+# Despliegue del nuevo dataframe maestro
+df_normatividad, df_maestro_base = cargar_datos()
 
 # -----------------------------------------------------------------------------
 # 1. Configuración de la Página y Estética General
