@@ -117,11 +117,11 @@ st.markdown("""
 # 2. Barra Lateral (Aquí "nace" la variable region)
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    # Cargar el Logo Institucional
+    # Logo Institucional
     try:
         st.image('data/CuencaVerdeLogo_V1.JPG', use_container_width=True)
     except:
-        st.caption("Fondo de Agua CuencaVerde") # Texto de respaldo por si falla la imagen
+        st.caption("Fondo de Agua CuencaVerde")
         
     st.markdown("---")
     st.subheader("Navegación")
@@ -140,78 +140,44 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("Filtros Globales")
     
-    # El archivo TerriData contiene datos agregados para Colombia y desagregados para Antioquia
     region = st.selectbox("Región / Departamento", ["Toda Colombia", "Antioquia"], index=1)
     
-    # Selector dinámico de municipio (Solo se activa si estamos en Antioquia)
     if region == "Antioquia":
-        # Extraemos los municipios reales del DataFrame (excluyendo el agregado departamental 'Antioquia')
-        municipios_reales = df_ic_base[(df_ic_base['Departamento'] == 'Antioquia') & (df_ic_base['Municipio'] != 'Antioquia')]['Municipio'].unique().tolist()
-        municipios_reales.sort() # Orden alfabético para mejor experiencia de usuario
-        municipios_reales.insert(0, "Todos") # Opción por defecto
-        
+        # CORRECCIÓN: Leemos del nuevo dataframe maestro
+        municipios_reales = df_maestro_base[(df_maestro_base['Departamento'] == 'Antioquia') & (df_maestro_base['Municipio'] != 'Antioquia')]['Municipio'].unique().tolist()
+        municipios_reales.sort()
+        municipios_reales.insert(0, "Todos")
         municipio_seleccionado = st.selectbox("Municipio Específico", municipios_reales)
     else:
         municipio_seleccionado = "Todos"
         
-    # El rango temporal usa la realidad DNP y proyecta hasta la agenda 2030
     anio_fiscal = st.slider("Vigencia Fiscal (TerriData + Proyecciones)", 2000, 2030, (2020, 2026))
 
 # -----------------------------------------------------------------------------
-# Motor de Filtrado Dinámico (Pandas Pipeline)
+# Motor de Filtrado Dinámico (El Nuevo Cerebro)
 # -----------------------------------------------------------------------------
 anio_inicio, anio_fin = anio_fiscal 
 
-# 1. Filtro Temporal ESTRICTO para TerriData
-df_ic = df_ic_base[(df_ic_base['Año'] >= anio_inicio) & (df_ic_base['Año'] <= anio_fin)]
+# 1. Filtro Temporal
+df_temp = df_maestro_base[(df_maestro_base['Año'] >= anio_inicio) & (df_maestro_base['Año'] <= anio_fin)].copy()
 
-# 2. Cálculo EXACTO del 1% y Escala Proporcional
+# 2. Filtro Espacial
 if region == "Toda Colombia":
-    recaudo_real_1_pct = df_ic[df_ic['Departamento'] == 'Colombia']['Minimo_1_Porciento'].sum()
-    filtro_ejecucion = df_ejecucion_base['region'].unique()
-    factor_escala = 1.0 
-    ruta_seleccion = "Toda Colombia" # Ruta para la UI
+    df_espacial = df_temp[df_temp['Departamento'] == 'Colombia']
+    ruta_seleccion = "Toda Colombia"
 else:
-    # Datos solo de Antioquia
-    df_ant = df_ic[(df_ic['Departamento'] == 'Antioquia') & (df_ic['Municipio'] != 'Antioquia')]
-    total_antioquia_ic = df_ant['Ingresos_Corrientes'].sum() # Base para la regla de tres
-    
+    df_espacial = df_temp[(df_temp['Departamento'] == 'Antioquia') & (df_temp['Municipio'] != 'Antioquia')]
     if municipio_seleccionado != "Todos":
-        df_mun = df_ant[df_ant['Municipio'] == municipio_seleccionado]
-        recaudo_real_1_pct = df_mun['Minimo_1_Porciento'].sum()
-        
-        # EL ARREGLO MATEMÁTICO: Escala proporcional según el peso económico real del municipio
-        ingresos_mun = df_mun['Ingresos_Corrientes'].sum()
-        factor_escala = ingresos_mun / total_antioquia_ic if total_antioquia_ic > 0 else 0
-        
-        filtro_ejecucion = [municipio_seleccionado]
-        ruta_seleccion = f"{municipio_seleccionado} - {region}" # Ruta específica
+        df_espacial = df_espacial[df_espacial['Municipio'] == municipio_seleccionado]
+        ruta_seleccion = f"{municipio_seleccionado} - Antioquia"
     else:
-        recaudo_real_1_pct = df_ant['Minimo_1_Porciento'].sum()
-        filtro_ejecucion = ['Antioquia', 'Valle de Aburrá']
-        factor_escala = 0.15 # Factor departamental aprox
-        ruta_seleccion = region
+        ruta_seleccion = "Antioquia"
 
-# 3. EL PUENTE: Inyectar la realidad a los Módulos 1 al 4
-df_origenes_dinamico = df_origenes.copy()
-df_origenes_dinamico['monto_recaudado'] = df_origenes_dinamico['monto_recaudado'].astype(float)
-
-df_origenes_dinamico.loc[df_origenes_dinamico['id_fuente'] == 'F001', 'monto_recaudado'] = recaudo_real_1_pct
-df_origenes_dinamico.loc[df_origenes_dinamico['id_fuente'] == 'F002', 'monto_recaudado'] *= factor_escala
-df_origenes_dinamico.loc[df_origenes_dinamico['id_fuente'] == 'F003', 'monto_recaudado'] *= factor_escala
-
-# 4. Filtrar y escalar ejecución
-df_ejecucion = df_ejecucion_base[df_ejecucion_base['region'].isin(filtro_ejecucion)].copy()
-if not df_ejecucion.empty:
-    df_ejecucion['monto_real_invertido'] *= factor_escala
-
-# 5. Flujo financiero y Brecha
-df_flujo = pd.merge(df_origenes_dinamico, df_ejecucion, on='id_fuente', how='left').fillna(0)
-df_flujo['brecha_perdida'] = df_flujo['monto_recaudado'] - df_flujo['monto_real_invertido']
-df_flujo['brecha_perdida'] = df_flujo['brecha_perdida'].clip(lower=0) 
-
-# 6. Impactos
-df_impacto = df_impacto_base[df_impacto_base['id_proyecto'].isin(df_ejecucion['id_proyecto'])]
+# 3. Cálculo de KPIs Globales Reales (Sin simulaciones)
+recaudo_1_pct = df_espacial['Minimo_1_Porciento'].sum()
+inversion_ambiental = df_espacial['Inversion_Ambiental_Ejecutada'].sum()
+brecha_total = max(0, recaudo_1_pct - inversion_ambiental)
+eficiencia = (inversion_ambiental / recaudo_1_pct) * 100 if recaudo_1_pct > 0 else 0
 
 # -----------------------------------------------------------------------------
 # 3. Módulos
@@ -219,181 +185,54 @@ df_impacto = df_impacto_base[df_impacto_base['id_proyecto'].isin(df_ejecucion['i
 # --- MÓDULO 1: EL PANORAMA NACIONAL VS. REGIONAL ---
 if modulo_seleccionado == "📊 1. El Panorama Nacional vs. Regional":
     st.title("Panorama de Recursos Ambientales e Hídricos")
-    
-    # 1. RUTA DE SELECCIÓN Y CONTEXTO
     st.info(f"📍 **Área de análisis actual:** `{ruta_seleccion}` | 📅 **Vigencia Fiscal:** `{anio_inicio} - {anio_fin}`")
-    st.markdown("En esta sección presentamos los KPIs principales del ecosistema financiero ambiental de la región seleccionada.")
     
-    total_recaudado = df_flujo['monto_recaudado'].sum()
-    total_ejecutado = df_flujo['monto_real_invertido'].sum()
-    brecha = df_flujo['brecha_perdida'].sum()
-    eficiencia = (total_ejecutado / total_recaudado) * 100 if total_recaudado > 0 else 0
-
-    # 2. MÉTRICAS CON TOOLTIPS (HELPS)
-    st.markdown("### Resumen Macro")
+    st.markdown("### Resumen Macro (Basado 100% en DNP e Interpolación)")
     col1, col2, col3 = st.columns(3)
-    col1.metric(
-        label="Total Capital Movilizado", 
-        value=f"${total_recaudado:,.0f}",
-        help="Suma total de recursos de Ley (basado en el 1% de ingresos corrientes reales del DNP) y recursos proyectados (Sector Eléctrico y Voluntarios) para el área y tiempo seleccionados."
-    )
-    col2.metric(
-        label="Inversión Real Ejecutada", 
-        value=f"${total_ejecutado:,.0f}", 
-        delta=f"-${brecha:,.0f} (Brecha/Fricción)", 
-        delta_color="inverse",
-        help="Dinero que efectivamente se decantó en obras, proyectos e infraestructura en territorio."
-    )
-    col3.metric(
-        label="Eficiencia del Sistema", 
-        value=f"{eficiencia:.1f}%",
-        help="Porcentaje del capital que sobrevive a los costos de transacción, burocracia y tiempos muertos. Cálculo: (Inversión Ejecutada / Capital Movilizado) * 100."
-    )
+    col1.metric("Potencial Ley 99 (1% IC)", f"${recaudo_1_pct:,.0f}")
+    col2.metric("Inversión Ambiental Ejecutada", f"${inversion_ambiental:,.0f}", delta=f"-${brecha_total:,.0f} (Brecha)", delta_color="inverse")
+    col3.metric("Eficiencia del Sistema", f"{eficiencia:.1f}%")
     
     st.markdown("---")
+    st.markdown("### Composición de la Inversión Territorial")
     
-    # 3. GRÁFICO Y DESGLOSE EN DOS COLUMNAS
-    st.markdown("### Composición del Capital Ambiental")
-    col_izq, col_der = st.columns([1, 1])
-    
-    with col_izq:
-        recursos_ley = df_flujo[df_flujo['tipo_recurso'].str.contains("Ley")]['monto_recaudado'].sum()
-        recursos_vol = df_flujo[df_flujo['tipo_recurso'].str.contains("Voluntario")]['monto_recaudado'].sum()
-        
-        st.metric("🏛️ Recursos de Ley (Mandatorios)", f"${recursos_ley:,.0f}", help="Incluye el Art. 111 (1% IC) y las Transferencias del Sector Eléctrico.")
-        st.metric("🤝 Recursos Voluntarios (Privados/Fondos)", f"${recursos_vol:,.0f}", help="Aportes ESG del sector corporativo y mecanismos de Fondos de Agua.")
-        
-        with st.expander("📖 Soporte Jurídico y Clasificación de Recursos"):
-            st.markdown("Esta tabla consolida los fundamentos legales que estructuran la movilización de capital.")
-            st.dataframe(df_normatividad, use_container_width=True)
-
-    with col_der:
-        # Gráfico de Dona con Plotly para darle vida visual al módulo
-        df_grafico = df_origenes_dinamico[df_origenes_dinamico['monto_recaudado'] > 0]
-        fig_dona = go.Figure(data=[go.Pie(
-            labels=df_grafico['tipo_recurso'], 
-            values=df_grafico['monto_recaudado'],
-            hole=.5,
-            marker_colors=['#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6'],
-            textinfo='percent'
-        )])
-        fig_dona.update_layout(
-            showlegend=True, 
-            legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
-            margin=dict(t=10, b=10, l=10, r=10),
-            height=300
-        )
-        st.plotly_chart(fig_dona, use_container_width=True)
-
-    # 4. FUENTE DE DATOS PERMANENTE (Transparencia)
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.caption("🔍 **Fuente Oficial de Datos:** Base construida sobre los reportes del *Departamento Nacional de Planeación (DNP) - TerriData* (Operaciones efectivas de caja). El cálculo del Art. 111 se deriva estrictamente de los ingresos corrientes históricos reportados por las entidades territoriales. Los recursos adicionales representan un factor de simulación escalado al peso económico del municipio.")
-
-    with st.expander("📖 Soporte Jurídico y Clasificación de Recursos"):
-        st.markdown("### Catálogo Normativo para la Protección del Agua")
-        st.write("Esta tabla consolida los fundamentos legales y los mecanismos voluntarios que estructuran la movilización de capital ambiental en Colombia.")
-        st.dataframe(df_normatividad, use_container_width=True)
-        st.caption("Fuentes: Ley 99 de 1993, Decretos Reglamentarios (MinAmbiente), y reportes de sostenibilidad corporativa (ESG).")
+    import plotly.graph_objects as go
+    fig_dona = go.Figure(data=[go.Pie(
+        labels=['Inversión Ambiental Realizada', 'Brecha (Dinero Retenido/Desviado)'], 
+        values=[inversion_ambiental, brecha_total],
+        hole=.5,
+        marker_colors=['#2ecc71', '#e74c3c']
+    )])
+    fig_dona.update_layout(height=350, margin=dict(t=10, b=10, l=10, r=10))
+    st.plotly_chart(fig_dona, use_container_width=True)
+    st.caption("🔍 **Fuente:** Datos y proyecciones basadas exclusivamente en TerriData (DNP). Ya no se incluyen simulaciones.")
 
 # --- MÓDULO 2: EL EMBUDO DE LA VERDAD (FLUJO) ---
 elif modulo_seleccionado == "📉 2. El Embudo de la Verdad (Flujo)":
     st.title("El Embudo de la Verdad")
-    st.write("Rastreo de la eficiencia del capital: Desde el origen del recurso hasta la ejecución en territorio.")
-    
     st.info(f"📍 **Área de análisis:** `{ruta_seleccion}` | 📅 **Vigencia Fiscal:** `{anio_inicio} - {anio_fin}`")
 
-    # Si no hay datos de recaudo, mostramos una alerta para no romper el gráfico
-    if df_flujo['monto_recaudado'].sum() == 0:
-        st.warning("No hay recursos recaudados registrados para esta selección temporal y espacial.")
+    if recaudo_1_pct == 0:
+        st.warning("No hay recursos para esta selección.")
     else:
-        # 1. PREPARACIÓN DE NODOS PARA EL SANKEY
-        # Identificamos las fuentes (origen) y los ejecutores (destino)
-        fuentes = df_flujo['tipo_recurso'].unique().tolist()
-        ejecutores = df_flujo[df_flujo['entidad_ejecutora'].notna()]['entidad_ejecutora'].unique().tolist()
-        nodo_brecha = "Brecha / Retención (Sin Ejecutar)"
+        import plotly.graph_objects as go
+        nodos = ["Ley 99 (1% ICLD)", "Inversión Ambiental Oficial", "Brecha / Retención"]
+        colores = ["rgba(52, 152, 219, 0.8)", "rgba(46, 204, 113, 0.8)", "rgba(231, 76, 60, 0.8)"]
         
-        # Lista maestra de nodos y su diccionario de índices (Plotly Sankey usa números, no nombres)
-        nodos = fuentes + ejecutores + [nodo_brecha]
-        nodo_indices = {nodo: i for i, nodo in enumerate(nodos)}
-        
-        source = []
-        target = []
-        value = []
-        
-        # 2. CONSTRUCCIÓN DE LOS ENLACES (LINKS)
-        for index, row in df_flujo.iterrows():
-            fuente_idx = nodo_indices[row['tipo_recurso']]
-            
-            # Camino A: El dinero que SÍ llegó a ejecutarse
-            if pd.notna(row['entidad_ejecutora']) and row['monto_real_invertido'] > 0:
-                ejecutor_idx = nodo_indices[row['entidad_ejecutora']]
-                source.append(fuente_idx)
-                target.append(ejecutor_idx)
-                value.append(row['monto_real_invertido'])
-                
-            # Camino B: La pérdida o brecha
-            if row['brecha_perdida'] > 0:
-                brecha_idx = nodo_indices[nodo_brecha]
-                source.append(fuente_idx)
-                target.append(brecha_idx)
-                value.append(row['brecha_perdida'])
+        # Flujo: Del 1% sale hacia la inversión o se va a la brecha
+        source = [0, 0]
+        target = [1, 2]
+        value = [inversion_ambiental, brecha_total]
 
-        # 3. COLORES DINÁMICOS
-        # Asignamos rojo a la brecha, verde a los ejecutores y azul a las fuentes
-        colores_nodos = []
-        for nodo in nodos:
-            if nodo == nodo_brecha:
-                colores_nodos.append("rgba(231, 76, 60, 0.8)") # Rojo
-            elif nodo in ejecutores:
-                colores_nodos.append("rgba(46, 204, 113, 0.8)") # Verde
-            else:
-                colores_nodos.append("rgba(52, 152, 219, 0.8)") # Azul
-
-        # 4. RENDERIZADO DEL GRÁFICO PLOTLY SANKEY
         fig_sankey = go.Figure(data=[go.Sankey(
             valueformat = ",.0f",
             valuesuffix = " COP",
-            node = dict(
-              pad = 20,
-              thickness = 25,
-              line = dict(color = "black", width = 0.5),
-              label = nodos,
-              color = colores_nodos
-            ),
-            link = dict(
-              source = source,
-              target = target,
-              value = value,
-              color = "rgba(189, 195, 199, 0.4)" 
-          ),
-          textfont=dict(color="black", size=14, family="Arial") # FUENTE FORZADA: Tamaño más grande y color sólido
+            node = dict(pad=20, thickness=25, line=dict(color="black", width=0.5), label=nodos, color=colores),
+            link = dict(source=source, target=target, value=value, color="rgba(189, 195, 199, 0.4)"),
+            textfont=dict(color="black", size=14, family="Arial")
         )])
-          
-        fig_sankey.update_layout(
-            title_text="Diagrama de Flujo del Ecosistema Financiero Ambiental", 
-            font_size=14, # Tamaño base de la fuente aumentado
-            height=600,   # Aumentamos un poco la altura para darle más "aire" a los nodos
-            margin=dict(t=40, b=20, l=20, r=20),
-            plot_bgcolor='white',
-            paper_bgcolor='white'
-        )
-        
+        fig_sankey.update_layout(height=500, margin=dict(t=40, b=20, l=20, r=20))
         st.plotly_chart(fig_sankey, use_container_width=True)
-        
-        with st.expander("📊 Ver matriz de datos del flujo"):
-            df_mostrar = df_flujo[['tipo_recurso', 'entidad_recaudadora', 'monto_recaudado', 'entidad_ejecutora', 'monto_real_invertido', 'brecha_perdida']]
-            st.dataframe(df_mostrar.style.format({
-                "monto_recaudado": "${:,.0f}", 
-                "monto_real_invertido": "${:,.0f}", 
-                "brecha_perdida": "${:,.0f}"
-            }), use_container_width=True)
-            
-    with st.expander("📖 Metodología de Análisis: La Brecha de Ejecución"):
-        st.markdown("""
-        * **Método de Visualización:** Diagrama de flujo de Sankey para mapear asimetrías de transferencia.
-        * **Definición de Brecha:** Se calcula como la diferencia matemática entre el recaudo bruto (obligatorio o voluntario) y el volumen de capital efectivamente convertido en infraestructura verde u obras estructurales en campo.
-        * **Causas Frecuentes:** Costos de transacción administrativos, fragmentación institucional, y tiempos de contratación prolongados que diluyen el valor del recurso en el tiempo.
-        """)
     
 # --- MÓDULO 3: VISOR GEOESPACIAL DE IMPACTO ---
 elif modulo_seleccionado == "🗺️ 3. Visor Geoespacial de Impacto":
@@ -530,70 +369,27 @@ elif modulo_seleccionado == "⚙️ 4. Simulador: Fondo Común":
         * **Referentes:** Esquemas de fondos de agua latinoamericanos y lineamientos de Soluciones Basadas en la Naturaleza (SbN) de la UICN.
         """)
 
-# --- MÓDULO 5: POTENCIAL DEL 1% (INGRESOS CORRIENTES - TERRIDATA) ---
+# --- MÓDULO 5: POTENCIAL DEL 1% ---
 elif modulo_seleccionado == "💰 5. Potencial del 1% (Art. 111)":
-    st.title("El Gigante Dormido: 1% de Ingresos Corrientes")
-    st.write("""
-    Según el Artículo 111 de la Ley 99 de 1993, los departamentos y municipios deben dedicar **mínimo el 1% de sus ingresos corrientes** 
-    a la adquisición y mantenimiento de áreas de importancia estratégica para la conservación de recursos hídricos.
-    """)
+    st.title("El Gigante Dormido: 1% vs Inversión Histórica")
     
-    # Filtramos la tabla ya recortada en tiempo (df_ic) según la región seleccionada
     if region == "Toda Colombia":
-        # TerriData tiene a 'Colombia' como un departamento agrupado
-        df_filtro_espacial = df_ic[df_ic['Departamento'] == 'Colombia']
-        titulo_grafico = "Evolución Nacional de Ingresos y Obligación Ambiental (COP)"
+        st.warning("Seleccione Antioquia para ver el desglose comparativo municipal.")
     else:
-        # Seleccionamos Antioquia, excluyendo el agregado departamental para ver solo municipios
-        df_filtro_espacial = df_ic[(df_ic['Departamento'] == 'Antioquia') & (df_ic['Municipio'] != 'Antioquia')]
+        import plotly.graph_objects as go
+        df_agrupado = df_espacial.groupby('Municipio')[['Ingresos_Corrientes', 'Minimo_1_Porciento', 'Inversion_Ambiental_Ejecutada']].sum().reset_index()
+        df_agrupado = df_agrupado.sort_values(by='Ingresos_Corrientes', ascending=False)
         
-        # Si el usuario eligió un municipio específico en la barra lateral, filtramos más
-        if municipio_seleccionado != "Todos":
-            df_filtro_espacial = df_filtro_espacial[df_filtro_espacial['Municipio'] == municipio_seleccionado]
-            
-        titulo_grafico = f"Distribución Municipal de Ingresos y Obligación Ambiental (COP) - {region}"
-
-    # AGRUPACIÓN: Sumar los años seleccionados (anio_inicio a anio_fin) y ordenar de mayor a menor
-    df_agrupado = df_filtro_espacial.groupby('Municipio')[['Ingresos_Corrientes', 'Minimo_1_Porciento']].sum().reset_index()
-    df_agrupado = df_agrupado.sort_values(by='Ingresos_Corrientes', ascending=False)
-    
-    # KPI Resumen
-    total_recaudo_potencial = df_agrupado['Minimo_1_Porciento'].sum()
-    st.metric(
-        label=f"Potencial Total de Inversión ({anio_inicio}-{anio_fin}) - {region}", 
-        value=f"${total_recaudo_potencial:,.0f} COP"
-    )
-    
-    # Gráfica Plotly
-    fig_ic = go.Figure()
-    
-    fig_ic.add_trace(go.Bar(
-        x=df_agrupado['Municipio'], 
-        y=df_agrupado['Ingresos_Corrientes'],
-        name='Ingresos Corrientes Totales',
-        marker_color='#bdc3c7'
-    ))
-    
-    fig_ic.add_trace(go.Bar(
-        x=df_agrupado['Municipio'], 
-        y=df_agrupado['Minimo_1_Porciento'],
-        name='1% Mandatorio (Conservación)',
-        marker_color='#3498db'
-    ))
-    
-    fig_ic.update_layout(
-        title=titulo_grafico,
-        barmode='overlay',
-        yaxis_type="log", # Fundamental para ver a Medellín y a un municipio de sexta categoría en la misma gráfica sin que la barra menor desaparezca visualmente
-        height=600,
-        xaxis_tickangle=-45 # Inclinamos el texto para leer los 125 municipios
-    )
-    
-    st.plotly_chart(fig_ic, use_container_width=True)
-    
-    st.markdown("### Datos Detallados")
-    st.dataframe(df_agrupado.style.format({"Ingresos_Corrientes": "${:,.0f}", "Minimo_1_Porciento": "${:,.0f}"}), use_container_width=True)
-    
+        fig_ic = go.Figure()
+        fig_ic.add_trace(go.Bar(x=df_agrupado['Municipio'], y=df_agrupado['Minimo_1_Porciento'], name='Potencial 1% (Mandatorio)', marker_color='#3498db'))
+        fig_ic.add_trace(go.Bar(x=df_agrupado['Municipio'], y=df_agrupado['Inversion_Ambiental_Ejecutada'], name='Inversión Ejecutada Oficial', marker_color='#2ecc71'))
+        
+        # Usamos barmode='group' para poner las barras una al lado de la otra
+        fig_ic.update_layout(title=f"Brecha Municipal en {ruta_seleccion}", barmode='group', yaxis_type="log", height=600, xaxis_tickangle=-45)
+        st.plotly_chart(fig_ic, use_container_width=True)
+        
+        st.dataframe(df_agrupado.style.format({"Ingresos_Corrientes": "${:,.0f}", "Minimo_1_Porciento": "${:,.0f}", "Inversion_Ambiental_Ejecutada": "${:,.0f}"}), use_container_width=True)
+        
     # Botón de Descarga CSV
     csv_ic = df_agrupado.to_csv(index=False).encode('utf-8')
     st.download_button(
